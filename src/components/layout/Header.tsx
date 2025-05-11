@@ -34,7 +34,7 @@ import useAuth from '../../hooks/useAuth'; // Adjust path if needed
 
 // --- Helper to construct full image URLs ---
 // Ensure NEXT_PUBLIC_BACKEND_BASE_URL is set in your .env.local (e.g., http://localhost:5000)
-const BACKEND_STATIC_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:5000';
+const BACKEND_STATIC_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
 
 const getFullImageUrl = (filenameOrUrl?: string, type: 'profile' | 'cover' = 'profile'): string => {
   const defaultProfilePic = '/images/default-avatar.png';
