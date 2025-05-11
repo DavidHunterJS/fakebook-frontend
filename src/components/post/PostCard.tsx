@@ -32,23 +32,16 @@ import { useLikePost, useDeletePost } from '../../hooks/usePosts';
 import { getFullImageUrl } from '../../utils/imgUrl';
 
 interface PostCardProps {
+  // Ensure Post type includes:
+  // - _id: string;
+  // - user: User | string; // Ideally populated User object
+  // - text?: string;
+  // - media?: string[]; // <-- Changed from image: string to media: string[]
+  // - likes: string[];
+  // - comments: any[]; // Or a Comment type array
+  // - createdAt: string | Date;
   post: Post;
 }
-
-// Helper function to fix URLs that come from the database with localhost
-const fixLocalhostUrl = (url: string | undefined): string | undefined => {
-  if (!url) return url;
-  
-  // Replace localhost URLs with the production Heroku URL
-  if (url.startsWith('http://localhost:5000/')) {
-    return url.replace(
-      'http://localhost:5000',
-      'https://fakebook-backend-a2a77a290552.herokuapp.com'
-    );
-  }
-  
-  return url;
-};
 
 const PostCard: React.FC<PostCardProps> = ({ post }) => {
   const { user: currentUser } = useAuth();
@@ -91,27 +84,19 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
     return <Card sx={{ mb: 3, p: 2 }}><Typography>Error loading post author.</Typography></Card>;
   }
 
-  // Fix: If profile picture is a localhost URL, replace it with the production URL
-  const fixedProfilePicture = fixLocalhostUrl(postUser.profilePicture);
-  
-  // Use the fixed URL with getFullImageUrl
-  const authorAvatarUrl = fixedProfilePicture 
-    ? (fixedProfilePicture.startsWith('http') 
-        ? fixedProfilePicture // If it's already a full URL, use it directly
-        : getFullImageUrl(fixedProfilePicture, 'profile')) // Otherwise, generate the URL
+  const authorAvatarUrl = postUser.profilePicture 
+    ? getFullImageUrl(postUser.profilePicture, 'profile') 
     : '/images/default-avatar.png';
-  
-  // No change needed for post images as they're working fine
   const postImageFilename = (post.media && post.media.length > 0) ? post.media[0] : null;
+  
   const postImageUrl = postImageFilename 
     ? getFullImageUrl(postImageFilename, 'post') 
     : null;
   
-  // Enhanced logging to debug the URL fixing
-  console.log(`[PostCard] Rendering post ${post._id}.`);
-  console.log(`[PostCard] User ${postUser.username}, Original Avatar: "${postUser.profilePicture}"`);
-  console.log(`[PostCard] Fixed Avatar: "${fixedProfilePicture}", Final URL: "${authorAvatarUrl}"`);
-  
+  // Log for debugging
+  console.log(`[PostCard] Rendering post ${post._id}. Media array: ${JSON.stringify(post.media)}. First image filename: "${postImageFilename}". Generated URL: "${postImageUrl}"`);
+  console.log(`[PostCard] User ${postUser.username}, Avatar file: "${postUser.profilePicture}", URL: "${authorAvatarUrl}"`);
+
   return (
     <Card sx={{ mb: 3 }}>
       <CardHeader
