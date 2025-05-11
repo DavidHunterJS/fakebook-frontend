@@ -35,6 +35,7 @@ import {
 } from '@mui/icons-material';
 import useAuth from '../hooks/useAuth';
 import api from '../utils/api';
+import { getFullImageUrl } from '../utils/imgUrl';
 
 // Define types for friend data
 interface FriendUser {
@@ -337,27 +338,19 @@ const FriendsPage: React.FC = () => {
   const getProfileImage = useCallback((user: FriendUser): string => {
     if (!user) return '/images/default-avatar.png';
     
-    const baseUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:5000';
-    
     // Check if we have a profile picture value
     const profilePic = user.profilePicture || user.profileImage;
     console.log(`[profilePic] ${profilePic}`);
     
-    // If no profile picture at all, return default
+    // If no profile picture, return default
     if (!profilePic || profilePic === 'default-avatar.png') {
       console.log(`User ${user.username}: Using default avatar`);
       return '/images/default-avatar.png';
     }
     
-    // If profile pic is already a full URL
-    if (profilePic.startsWith('http')) {
-      console.log(`User ${user.username}: Using full URL ${profilePic}`);
-      return profilePic;
-    }
-    
-    // Construct the URL with cache-busting
-    const imageUrl = `${baseUrl}/uploads/profile/${profilePic}?t=${Date.now()}`;
-    console.log(`User ${user.username}: Constructed URL ${imageUrl}`);
+    // Use the centralized getFullImageUrl function
+    const imageUrl = getFullImageUrl(profilePic, 'profile');
+    console.log(`User ${user.username}: Using getFullImageUrl: ${imageUrl}`);
     return imageUrl;
   }, []);
 
