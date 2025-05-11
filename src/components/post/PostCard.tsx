@@ -88,7 +88,7 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
   const authorAvatarUrl = postUser.profilePicture 
     ? getFullImageUrl(postUser.profilePicture, 'profile') 
     : '/images/default-avatar.png';
-  
+  console.log(`[authorAvatarUrl] ${authorAvatarUrl}`)
   // FIXED: Get the first image filename from the 'media' array
   const postImageFilename = (post.media && post.media.length > 0) ? post.media[0] : null;
   
