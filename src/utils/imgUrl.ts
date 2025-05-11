@@ -21,7 +21,7 @@ const DEFAULT_IMAGE_MAP: Record<ImageType, string> = {
 const DEFAULT_FILENAMES = new Set(['default-avatar.png', 'default-cover.png']);
 
 // Backend static URL from environment
-const BACKEND_STATIC_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
+const BACKEND_STATIC_URL = process.env.NEXT_PUBLIC_SOCKET_URL;
 
 /**
  * Generates a full URL for an image based on its type and filename
