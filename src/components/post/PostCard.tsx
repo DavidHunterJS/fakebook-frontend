@@ -6,7 +6,7 @@ import {
   CardContent,
   CardActions,
   CardMedia,
-  Button, // Import Button
+  Button,
   Avatar,
   Typography,
   IconButton,
@@ -23,15 +23,13 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import Link from 'next/link';
-import { Post } from '../../types/post'; // Adjust path if needed
-import { User } from '../../types/user'; // Adjust path if needed, ensure User includes profilePicture
+import { Post } from '../../types/post';
+import { User } from '../../types/user';
 import CommentForm from './CommentForm';
 import CommentList from './CommentList';
-import useAuth from '../../hooks/useAuth'; // Adjust path if needed
-import { useLikePost, useDeletePost } from '../../hooks/usePosts'; // Adjust path if needed
-import {getFullImageUrl}  from '../../utils/imgUrl'; // Adjust the path as needed
-
-
+import useAuth from '../../hooks/useAuth';
+import { useLikePost, useDeletePost } from '../../hooks/usePosts';
+import { getFullImageUrl } from '../../utils/imgUrl';
 
 interface PostCardProps {
   // Ensure Post type includes:
@@ -73,7 +71,7 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
   };
 
   const handleLikeClick = () => {
-     if (!post._id || !currentUser) return;
+    if (!post._id || !currentUser) return;
     likeMutation.mutate(post._id);
   };
 
@@ -86,15 +84,22 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
     return <Card sx={{ mb: 3, p: 2 }}><Typography>Error loading post author.</Typography></Card>;
   }
 
-  const authorAvatarUrl = getFullImageUrl(postUser.profilePicture, 'profile');
-
-  // --- CORRECTION FOR POST IMAGE ---
-  // Get the first image filename from the 'media' array
+  // FIXED: Correct parameter order - filename first, type second
+  const authorAvatarUrl = postUser.profilePicture 
+    ? getFullImageUrl(postUser.profilePicture, 'profile') 
+    : '/images/default-avatar.png';
+  
+  // FIXED: Get the first image filename from the 'media' array
   const postImageFilename = (post.media && post.media.length > 0) ? post.media[0] : null;
-  // Generate the URL using the filename from the media array
-  const postImageUrl = postImageFilename ? getFullImageUrl(postImageFilename, 'post') : null;
+  
+  // FIXED: Correct parameter order - filename first, type second
+  const postImageUrl = postImageFilename 
+    ? getFullImageUrl(postImageFilename, 'post') 
+    : null;
+  
+  // Log for debugging
   console.log(`[PostCard] Rendering post ${post._id}. Media array: ${JSON.stringify(post.media)}. First image filename: "${postImageFilename}". Generated URL: "${postImageUrl}"`);
-  // --- END CORRECTION ---
+  console.log(`[PostCard] User ${postUser.username}, Avatar file: "${postUser.profilePicture}", URL: "${authorAvatarUrl}"`);
 
   return (
     <Card sx={{ mb: 3 }}>
@@ -179,21 +184,21 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
       <Divider />
       <CardActions sx={{ justifyContent: 'space-around' }}>
         <Button
-            size="small"
-            startIcon={isLiked ? <FavoriteIcon color="error" /> : <FavoriteBorderIcon />}
-            onClick={handleLikeClick}
-            disabled={likeMutation.isPending || !currentUser}
-            sx={{ textTransform: 'none', color: isLiked ? 'error.main' : 'text.secondary' }}
+          size="small"
+          startIcon={isLiked ? <FavoriteIcon color="error" /> : <FavoriteBorderIcon />}
+          onClick={handleLikeClick}
+          disabled={likeMutation.isPending || !currentUser}
+          sx={{ textTransform: 'none', color: isLiked ? 'error.main' : 'text.secondary' }}
         >
-            Like
+          Like
         </Button>
         <Button
-            size="small"
-            startIcon={<CommentIcon />}
-            onClick={handleCommentClick}
-            sx={{ textTransform: 'none', color: 'text.secondary' }}
+          size="small"
+          startIcon={<CommentIcon />}
+          onClick={handleCommentClick}
+          sx={{ textTransform: 'none', color: 'text.secondary' }}
         >
-            Comment
+          Comment
         </Button>
       </CardActions>
 
