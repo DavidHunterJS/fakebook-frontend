@@ -4,7 +4,8 @@ const nextConfig = {
   images: {
     domains: [
       'fakebook-backend-a2a77a290552.herokuapp.com',
-      'localhost'
+      'localhost',
+      'trippy.wtf'
     ],
   },
 }
