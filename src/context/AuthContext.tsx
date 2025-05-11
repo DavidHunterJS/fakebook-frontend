@@ -4,16 +4,6 @@ import { isAxiosError } from 'axios';
 import axiosInstance from '../utils/api'; // Assuming your axios instance is in utils/api
 import { User } from '../types/user'; // Adjust path as needed
 
-// Define API error interface
-interface ApiError {
-  response?: {
-    data?: {
-      message?: string;
-      errors?: Record<string, string>;
-    };
-  };
-  message?: string;
-}
 
 // Helper function to normalize user data (ensure it's consistent)
 const normalizeUser = (userData: User | Partial<User> | Record<string, unknown> | null): User | null => {

@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Box, Typography, Paper } from '@mui/material';
-import Layout from '../components/layout/Layout';
 import PostForm from '../components/post/PostForm';
 import PostList from '../components/post/PostList';
 import useAuth from '../hooks/useAuth';

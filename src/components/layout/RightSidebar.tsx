@@ -35,10 +35,6 @@ interface SuggestionsApiResponse {
     suggestions: UserSuggestion[];
 }
 
-interface FriendRequestApiResponse {
-    message: string;
-    friendship: object; // Or a more specific type
-}
 
 interface ActiveFriend {
     _id: string;

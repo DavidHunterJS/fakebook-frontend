@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
+import Image from 'next/image';
 import {
   Container,
   Box,
@@ -9,7 +10,6 @@ import {
   Button,
   Tabs,
   Tab,
-  Divider,
   CircularProgress,
   Alert,
 } from '@mui/material';
@@ -26,6 +26,19 @@ import {getFullImageUrl}  from '../../utils/imgUrl'; // Adjust the path as neede
 // --- Helper to construct full image URLs ---
 // const BACKEND_STATIC_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:5000';
 
+// Define a type for API errors
+interface ApiError {
+  response?: {
+    data?: {
+      message?: string;
+    };
+    status?: number;
+  };
+  config?: {
+    url?: string;
+  };
+  message?: string;
+}
 
 // --- Helper to check if a string looks like a MongoDB ObjectId ---
 const isLikelyObjectIdString = (id: string): boolean => {
@@ -65,8 +78,8 @@ const ProfilePage: React.FC = () => {
   const [isFollowing, setIsFollowing] = useState(false);
   const [debug, setDebug] = useState<string[]>([]);
 
-  // Simplified API request helper
-  const makeApiRequest = async (url: string, method: 'get' | 'post' | 'put' | 'delete' = 'get', data?: unknown) => {
+  // Simplified API request helper - now memoized with useCallback
+  const makeApiRequest = useCallback(async (url: string, method: 'get' | 'post' | 'put' | 'delete' = 'get', data?: unknown) => {
     const addDebug = (msg: string) => { console.log(msg); setDebug(prev => [...prev, msg]); };
     addDebug(`Attempting ${method.toUpperCase()} request to relative path: ${url}`);
     try {
@@ -80,17 +93,18 @@ const ProfilePage: React.FC = () => {
         }
         addDebug(`API request succeeded. Full URL: ${response.config.url}`);
         return response;
-    } catch (err: any) {
-        const fullUrl = err.config?.url;
-        const errMsg = err.response?.data?.message || err.message || 'API request failed';
-        const status = err.response?.status || 'No Status';
+    } catch (err: unknown) {
+        const error = err as ApiError;
+        const fullUrl = error.config?.url;
+        const errMsg = error.response?.data?.message || error.message || 'API request failed';
+        const status = error.response?.status || 'No Status';
         addDebug(`API request failed. Full URL: ${fullUrl || url} - Status: ${status}, Message: ${errMsg}`);
-        if (err.response?.data) {
-            addDebug(`Error Response Body: ${JSON.stringify(err.response.data)}`);
+        if (error.response?.data) {
+            addDebug(`Error Response Body: ${JSON.stringify(error.response.data)}`);
         }
-        throw err;
+        throw error;
     }
-  };
+  }, [setDebug]); // Add setDebug as a dependency
 
   useEffect(() => {
     // Handle invalid ID logic
@@ -148,9 +162,10 @@ const ProfilePage: React.FC = () => {
              throw new Error('Profile data not found in API response.');
         }
 
-      } catch (error: any) {
-        console.error('Error fetching profile:', error);
-        setError(error.response?.data?.message || error.message || 'Failed to load profile data.');
+      } catch (error: unknown) {
+        const err = error as ApiError;
+        console.error('Error fetching profile:', err);
+        setError(err.response?.data?.message || err.message || 'Failed to load profile data.');
         setProfile(null);
         setPosts([]);
       } finally {
@@ -167,15 +182,16 @@ const ProfilePage: React.FC = () => {
             const postsData = postsResponse?.data?.posts || (Array.isArray(postsResponse?.data) ? postsResponse.data : []);
             setDebug(prev => [...prev, `Found ${postsData.length} posts separately.`]);
             setPosts(postsData);
-        } catch (error: any) {
-            setDebug(prev => [...prev, `Error fetching posts separately: ${error.message}`]);
+        } catch (error: unknown) {
+            const err = error as ApiError;
+            setDebug(prev => [...prev, `Error fetching posts separately: ${err.message}`]);
             setPosts([]);
         }
     };
 
     fetchProfileAndPosts();
 
-  }, [id, currentUser?._id, router.isReady]);
+  }, [id, currentUser, router, makeApiRequest]); // Added currentUser and router as dependencies
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -204,9 +220,10 @@ const ProfilePage: React.FC = () => {
           : undefined;
         return { ...prevProfile, followers: updatedFollowers, relationshipStatus: updatedRelationshipStatus };
       });
-    } catch (followErr: any) {
-      console.error('Error toggling follow:', followErr);
-      setError(followErr.response?.data?.message || followErr.message || 'Follow action failed.');
+    } catch (followErr: unknown) {
+      const err = followErr as ApiError;
+      console.error('Error toggling follow:', err);
+      setError(err.response?.data?.message || err.message || 'Follow action failed.');
     }
   };
 
@@ -241,34 +258,6 @@ const ProfilePage: React.FC = () => {
   const coverPhotoUrl = getFullImageUrl(profile.coverPhoto, 'cover');
   console.log(`[coverPhotoUrl] =  ${coverPhotoUrl}`);
   
-// Add this helper function that ensures we use "covers" plural
-const getCoverPhotoUrl = (filename?: string): string => {
-  if (!filename || filename === 'default-cover.png') {
-    return '/images/default-cover.png';
-  }
-  
-  // Check if it's already a full URL
-  if (filename.startsWith('http')) {
-    return filename;
-  }
-  
-  // Extract just the filename if it contains a path
-  const actualFilename = filename.includes('/') 
-    ? filename.split('/').pop() 
-    : filename;
-    
-  // Create URL with the correct "covers" plural path and cache buster
-  const baseUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:5000';
-  const url = `${baseUrl}/uploads/covers/${actualFilename}?t=${Date.now()}`;
-  
-  console.log(`[getCoverPhotoUrl] Created URL with COVERS (plural): ${url}`);
-  return url;
-};
-
-// Now use this helper instead
-const correctedCoverPhotoUrl = getCoverPhotoUrl(profile.coverPhoto);
-console.log(`[profile.coverPhoto] = ${profile.coverPhoto}`);
-
   // -------------------------------------------------------------------
 
   return (
@@ -276,21 +265,20 @@ console.log(`[profile.coverPhoto] = ${profile.coverPhoto}`);
       <Paper sx={{ borderRadius: 2, overflow: 'hidden', mb: 3 }}>
         <Box sx={{ height: 250, width: '100%', position: 'relative', bgcolor: 'grey.300', overflow: 'hidden' }}>
           {profile.coverPhoto && profile.coverPhoto !== 'default-cover.png' && (
-            <img
-              src={correctedCoverPhotoUrl}
+            <Image
+              src={coverPhotoUrl}
               alt={`${profile.username}'s cover photo`}
+              fill
               style={{
-                width: '100%',
-                height: '100%',
                 objectFit: 'cover',
-                objectPosition: 'center',
-                display: 'block'
+                objectPosition: 'center'
               }}
               onError={(e) => {
-                console.error("Error loading cover image with <img> tag:", e);
-                (e.target as HTMLImageElement).style.display = 'none';
+                console.error("Error loading cover image:", e);
+                // We can't directly manipulate style in Next.js Image component like with img
+                // Instead, you might need to set a state to conditionally render the image
               }}
-            />
+          />
           )}
         </Box>
 

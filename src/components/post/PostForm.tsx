@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Box, TextField, Button, Avatar, Paper, IconButton, CircularProgress } from '@mui/material'; // Added CircularProgress
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
-import Image from 'next/image'; // Using next/image
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import api from '../../utils/api'; // Assuming this is your configured axios instance
@@ -45,7 +44,7 @@ const PostForm = () => {
       setPreviewUrl(null);
       console.log('Post created successfully!');
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
         console.error("Error creating post:", error);
         // Optionally set an error state to display to the user
         // setError(error.response?.data?.message || error.message || "Failed to create post.");

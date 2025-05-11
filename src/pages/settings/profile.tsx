@@ -1,6 +1,5 @@
 // pages/settings/profile.tsx
 import React, { useState, useEffect, ChangeEvent, FormEvent, FC } from 'react';
-import { useRouter } from 'next/router';
 import {
   Container,
   Paper,
@@ -17,7 +16,16 @@ import {
 import { PhotoCamera, Save as SaveIcon } from '@mui/icons-material';
 import useAuth from '../../hooks/useAuth'; // Adjust path as needed
 import api from '../../utils/api'; // Your configured axios instance
-import { User } from '../../types/user'; // Adjust path as needed. Ensure this User type has profilePicture
+
+// Define a type for API errors
+interface ApiError {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+  message?: string;
+}
 
 // Define image types as a union type
 type ImageType = 'profile' | 'cover' | 'post';
@@ -96,7 +104,6 @@ interface ProfileFormData {
 }
 
 const EditProfilePage: FC = () => {
-  const router = useRouter();
   const { user, token, updateUserInContext, loading: authLoading } = useAuth();
 
   console.log('[EditProfilePage] User from useAuth():', user, 'AuthLoading:', authLoading);
@@ -190,8 +197,10 @@ const EditProfilePage: FC = () => {
       });
       updateUserInContext(res.data);
       setSuccessMessage('Profile details updated successfully!');
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || 'Failed to update profile details.');
+    } catch (err: unknown) {
+      // Cast err to ApiError type before accessing its properties
+      const error = err as ApiError;
+      setError(error.response?.data?.message || error.message || 'Failed to update profile details.');
     } finally {
       setLoadingDetails(false);
     }
@@ -218,7 +227,7 @@ const EditProfilePage: FC = () => {
     uploadFormData.append(type, file, file.name);
 
     console.log(`[EditProfilePage] handleUploadImage - FormData to be sent for type "${type}":`);
-    for (let [key, value] of uploadFormData.entries()) {
+    for (const [key, value] of uploadFormData.entries()) {
       console.log(`  FormData Entry - ${key}:`, value);
     }
 
@@ -248,9 +257,10 @@ const EditProfilePage: FC = () => {
         setCoverPhotoFile(null);
       }
       setSuccessMessage(`${type === 'profilePicture' ? 'Profile picture' : 'Cover photo'} updated successfully!`);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as ApiError;
       console.error(`[EditProfilePage] handleUploadImage - Error during API call for type "${type}":`, err);
-      setError(err.response?.data?.message || err.message || `Failed to upload ${type}.`);
+      setError(error.response?.data?.message || error.message || `Failed to upload ${type}.`);
     } finally {
       setLoadingState(false);
     }

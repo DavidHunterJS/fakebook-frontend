@@ -1,8 +1,17 @@
 // src/types/post.ts
 import { User } from './user'; // Adjust path if needed
 
+// Define a ReportReason interface
+export interface ReportReason {
+  _id?: string;
+  reason: string;
+  reportedBy?: string | User; // User ID or User object
+  createdAt?: string | Date;
+  additionalInfo?: string;
+  status?: 'pending' | 'reviewed' | 'dismissed' | 'actioned';
+}
+
 // Define the structure for a Comment if not already defined elsewhere
-// If you have a more detailed Comment type, use that instead of 'any' below
 export interface Comment {
   _id: string;
   text: string;
@@ -26,7 +35,7 @@ export interface Post {
   tags?: string[];    // Optional array of tags
   reported?: boolean; // Optional flag if the post is reported
   shares?: string[];  // Optional array of user IDs who shared, or Share objects
-  reportReasons?: any[]; // Optional array for report details
+  reportReasons?: ReportReason[]; // Array of report reason objects
   createdAt: string | Date;
   updatedAt: string | Date;
 
@@ -51,5 +60,3 @@ export interface PostsResponse {
   };
   // Add other potential response fields if needed
 }
-
-

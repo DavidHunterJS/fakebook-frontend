@@ -3,7 +3,8 @@ import { NextPage } from 'next';
 import { ReactElement, ReactNode } from 'react';
 import { AppProps } from 'next/app';
 
-export type NextPageWithLayout<P = {}, IP = P> = NextPage<P, IP> & {
+// Using Record<string, unknown> instead of {} for a proper "any object" type
+export type NextPageWithLayout<P = Record<string, unknown>, IP = P> = NextPage<P, IP> & {
   getLayout?: (page: ReactElement) => ReactNode;
   hideSidebars?: boolean;
   hideHeader?: boolean;

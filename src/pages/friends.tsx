@@ -1,5 +1,5 @@
 // pages/friends.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import {
   Container,
@@ -15,7 +15,6 @@ import {
   CardContent,
   CardActions,
   Grid,
-  Divider,
   Alert,
   Pagination,
   IconButton,
@@ -36,9 +35,6 @@ import {
 } from '@mui/icons-material';
 import useAuth from '../hooks/useAuth';
 import api from '../utils/api';
-import { getFullImageUrl } from '../utils/imgUrl'; 
-import { log } from 'node:console';
-
 
 // Define types for friend data
 interface FriendUser {
@@ -75,8 +71,18 @@ enum FriendTab {
   BLOCKED = 4
 }
 
+// Define an interface for API errors
+interface ApiError {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+  message?: string;
+}
+
 const FriendsPage: React.FC = () => {
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   
   // State
@@ -97,7 +103,7 @@ const FriendsPage: React.FC = () => {
   });
   
   // Helper to handle API errors
-  const handleApiError = (error: any, fallbackMessage: string) => {
+  const handleApiError = useCallback((error: ApiError, fallbackMessage: string) => {
     console.error(error);
     if (error.response?.data?.message) {
       setError(error.response.data.message);
@@ -107,26 +113,70 @@ const FriendsPage: React.FC = () => {
       setError(fallbackMessage);
     }
     setLoading(false);
-  };
+  }, []);
 
-  // Load data based on active tab
-  useEffect(() => {
-    if (!isAuthenticated && !authLoading) {
-      router.push('/login');
-      return;
+  // Fetch functions for each tab - wrap each in useCallback
+  const fetchFriends = useCallback(async (page: number = 1) => {
+    try {
+      const response = await api.get(`/friends?page=${page}&limit=10`);
+      if (response.data && response.data.friends) {
+        setFriends(response.data.friends);
+        setPagination(response.data.pagination || { total: 0, page: 1, pages: 1 });
+      }
+    } catch (error) {
+      handleApiError(error as ApiError, 'Failed to load friends');
     }
+  }, [handleApiError]);
 
-    if (!isAuthenticated) return;
-    
-    setLoading(true);
-    setError(null);
-    setCurrentPage(1);
-    
-    loadTabData(activeTab, 1);
-  }, [isAuthenticated, authLoading, activeTab]);
+  const fetchPendingRequests = useCallback(async (page: number = 1) => {
+    try {
+      const response = await api.get(`/friends/requests/pending?page=${page}&limit=10`);
+      if (response.data && response.data.requests) {
+        setPendingRequests(response.data.requests);
+        setPagination(response.data.pagination || { total: 0, page: 1, pages: 1 });
+      }
+    } catch (error) {
+      handleApiError(error as ApiError, 'Failed to load friend requests');
+    }
+  }, [handleApiError]);
+
+  const fetchSentRequests = useCallback(async (page: number = 1) => {
+    try {
+      const response = await api.get(`/friends/requests/sent?page=${page}&limit=10`);
+      if (response.data && response.data.requests) {
+        setSentRequests(response.data.requests);
+        setPagination(response.data.pagination || { total: 0, page: 1, pages: 1 });
+      }
+    } catch (error) {
+      handleApiError(error as ApiError, 'Failed to load sent requests');
+    }
+  }, [handleApiError]);
+
+  const fetchSuggestions = useCallback(async () => {
+    try {
+      const response = await api.get('/friends/suggestions?limit=20');
+      if (response.data && response.data.suggestions) {
+        setSuggestions(response.data.suggestions);
+      }
+    } catch (error) {
+      handleApiError(error as ApiError, 'Failed to load friend suggestions');
+    }
+  }, [handleApiError]);
+
+  const fetchBlockedUsers = useCallback(async (page: number = 1) => {
+    try {
+      const response = await api.get(`/friends/blocked?page=${page}&limit=10`);
+      if (response.data && response.data.blockedUsers) {
+        setBlockedUsers(response.data.blockedUsers);
+        setPagination(response.data.pagination || { total: 0, page: 1, pages: 1 });
+      }
+    } catch (error) {
+      handleApiError(error as ApiError, 'Failed to load blocked users');
+    }
+  }, [handleApiError]);
 
   // Function to load data for the current tab
-  const loadTabData = async (tab: FriendTab, page: number = 1) => {
+  const loadTabData = useCallback(async (tab: FriendTab, page: number = 1) => {
     try {
       setLoading(true);
       
@@ -148,74 +198,30 @@ const FriendsPage: React.FC = () => {
           break;
       }
     } catch (error) {
-      handleApiError(error, 'Failed to load data');
+      handleApiError(error as ApiError, 'Failed to load data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchFriends, fetchPendingRequests, fetchSentRequests, fetchSuggestions, fetchBlockedUsers, handleApiError]);
 
-  // Fetch functions for each tab
-  const fetchFriends = async (page: number = 1) => {
-    try {
-      const response = await api.get(`/friends?page=${page}&limit=10`);
-      if (response.data && response.data.friends) {
-        setFriends(response.data.friends);
-        setPagination(response.data.pagination || { total: 0, page: 1, pages: 1 });
-      }
-    } catch (error) {
-      handleApiError(error, 'Failed to load friends');
+  // Load data based on active tab
+  useEffect(() => {
+    if (!isAuthenticated && !authLoading) {
+      router.push('/login');
+      return;
     }
-  };
 
-  const fetchPendingRequests = async (page: number = 1) => {
-    try {
-      const response = await api.get(`/friends/requests/pending?page=${page}&limit=10`);
-      if (response.data && response.data.requests) {
-        setPendingRequests(response.data.requests);
-        setPagination(response.data.pagination || { total: 0, page: 1, pages: 1 });
-      }
-    } catch (error) {
-      handleApiError(error, 'Failed to load friend requests');
-    }
-  };
-
-  const fetchSentRequests = async (page: number = 1) => {
-    try {
-      const response = await api.get(`/friends/requests/sent?page=${page}&limit=10`);
-      if (response.data && response.data.requests) {
-        setSentRequests(response.data.requests);
-        setPagination(response.data.pagination || { total: 0, page: 1, pages: 1 });
-      }
-    } catch (error) {
-      handleApiError(error, 'Failed to load sent requests');
-    }
-  };
-
-  const fetchSuggestions = async () => {
-    try {
-      const response = await api.get('/friends/suggestions?limit=20');
-      if (response.data && response.data.suggestions) {
-        setSuggestions(response.data.suggestions);
-      }
-    } catch (error) {
-      handleApiError(error, 'Failed to load friend suggestions');
-    }
-  };
-
-  const fetchBlockedUsers = async (page: number = 1) => {
-    try {
-      const response = await api.get(`/friends/blocked?page=${page}&limit=10`);
-      if (response.data && response.data.blockedUsers) {
-        setBlockedUsers(response.data.blockedUsers);
-        setPagination(response.data.pagination || { total: 0, page: 1, pages: 1 });
-      }
-    } catch (error) {
-      handleApiError(error, 'Failed to load blocked users');
-    }
-  };
+    if (!isAuthenticated) return;
+    
+    setLoading(true);
+    setError(null);
+    setCurrentPage(1);
+    
+    loadTabData(activeTab, 1);
+  }, [isAuthenticated, authLoading, activeTab, loadTabData, router]);
 
   // Action functions
-  const handleSendFriendRequest = async (userId: string) => {
+  const handleSendFriendRequest = useCallback(async (userId: string) => {
     try {
       await api.post(`/friends/request/${userId}`);
       // Refresh the current tab data
@@ -225,49 +231,49 @@ const FriendsPage: React.FC = () => {
         await fetchSuggestions();
       }
     } catch (error) {
-      handleApiError(error, 'Failed to send friend request');
+      handleApiError(error as ApiError, 'Failed to send friend request');
     }
-  };
+  }, [activeTab, fetchSuggestions, handleApiError, loadTabData]);
 
-  const handleAcceptRequest = async (userId: string) => {
+  const handleAcceptRequest = useCallback(async (userId: string) => {
     try {
       await api.put(`/friends/accept/${userId}`);
       await fetchPendingRequests();
       // Also refresh the friends list
       await fetchFriends();
     } catch (error) {
-      handleApiError(error, 'Failed to accept friend request');
+      handleApiError(error as ApiError, 'Failed to accept friend request');
     }
-  };
+  }, [fetchFriends, fetchPendingRequests, handleApiError]);
 
-  const handleDeclineRequest = async (userId: string) => {
+  const handleDeclineRequest = useCallback(async (userId: string) => {
     try {
       await api.put(`/friends/decline/${userId}`);
       await fetchPendingRequests();
     } catch (error) {
-      handleApiError(error, 'Failed to decline friend request');
+      handleApiError(error as ApiError, 'Failed to decline friend request');
     }
-  };
+  }, [fetchPendingRequests, handleApiError]);
 
-  const handleCancelRequest = async (userId: string) => {
+  const handleCancelRequest = useCallback(async (userId: string) => {
     try {
       await api.delete(`/friends/cancel/${userId}`);
       await fetchSentRequests();
     } catch (error) {
-      handleApiError(error, 'Failed to cancel friend request');
+      handleApiError(error as ApiError, 'Failed to cancel friend request');
     }
-  };
+  }, [fetchSentRequests, handleApiError]);
 
-  const handleRemoveFriend = async (userId: string) => {
+  const handleRemoveFriend = useCallback(async (userId: string) => {
     try {
       await api.delete(`/friends/${userId}`);
       await fetchFriends();
     } catch (error) {
-      handleApiError(error, 'Failed to remove friend');
+      handleApiError(error as ApiError, 'Failed to remove friend');
     }
-  };
+  }, [fetchFriends, handleApiError]);
 
-  const handleBlockUser = async (userId: string) => {
+  const handleBlockUser = useCallback(async (userId: string) => {
     try {
       await api.put(`/friends/block/${userId}`);
       // Refresh all relevant lists
@@ -276,18 +282,18 @@ const FriendsPage: React.FC = () => {
       if (activeTab === FriendTab.SENT) await fetchSentRequests();
       await fetchBlockedUsers();
     } catch (error) {
-      handleApiError(error, 'Failed to block user');
+      handleApiError(error as ApiError, 'Failed to block user');
     }
-  };
+  }, [activeTab, fetchBlockedUsers, fetchFriends, fetchPendingRequests, fetchSentRequests, handleApiError]);
 
-  const handleUnblockUser = async (userId: string) => {
+  const handleUnblockUser = useCallback(async (userId: string) => {
     try {
       await api.put(`/friends/unblock/${userId}`);
       await fetchBlockedUsers();
     } catch (error) {
-      handleApiError(error, 'Failed to unblock user');
+      handleApiError(error as ApiError, 'Failed to unblock user');
     }
-  };
+  }, [fetchBlockedUsers, handleApiError]);
 
   // Add this inside your component after fetching friends
   console.log('First friend data structure:', friends.length > 0 ? JSON.stringify(friends[0], null, 2) : 'No friends');
@@ -312,12 +318,12 @@ const FriendsPage: React.FC = () => {
   };
 
   // View profile function
-  const viewProfile = (userId: string) => {
+  const viewProfile = useCallback((userId: string) => {
     router.push(`/profile/${userId}`);
-  };
+  }, [router]);
 
   // Helper function to get user display name
-  const getUserName = (user: FriendUser): string => {
+  const getUserName = useCallback((user: FriendUser): string => {
     if (user.firstName && user.lastName) {
       return `${user.firstName} ${user.lastName}`;
     } else if (user.name) {
@@ -325,43 +331,42 @@ const FriendsPage: React.FC = () => {
     } else {
       return user.username || 'Unknown User';
     }
-  };
+  }, []);
 
   // Helper function to get profile image URL
-  // Replace your getProfileImage function with this more robust version
-const getProfileImage = (user: FriendUser): string => {
-  if (!user) return '/images/default-avatar.png';
-  
-  const baseUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:5000';
-  
-  // Check if we have a profile picture value
-  const profilePic = user.profilePicture || user.profileImage;
-  console.log(`[profilePic] ${profilePic}`);
-  
-  // If no profile picture at all, return default
-  if (!profilePic || profilePic === 'default-avatar.png') {
-    console.log(`User ${user.username}: Using default avatar`);
-    return '/images/default-avatar.png';
-  }
-  
-  // If profile pic is already a full URL
-  if (profilePic.startsWith('http')) {
-    console.log(`User ${user.username}: Using full URL ${profilePic}`);
-    return profilePic;
-  }
-  
-  // Construct the URL with cache-busting
-  const imageUrl = `${baseUrl}/uploads/profile/${profilePic}?t=${Date.now()}`;
-  console.log(`User ${user.username}: Constructed URL ${imageUrl}`);
-  return imageUrl;
-};
+  const getProfileImage = useCallback((user: FriendUser): string => {
+    if (!user) return '/images/default-avatar.png';
+    
+    const baseUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:5000';
+    
+    // Check if we have a profile picture value
+    const profilePic = user.profilePicture || user.profileImage;
+    console.log(`[profilePic] ${profilePic}`);
+    
+    // If no profile picture at all, return default
+    if (!profilePic || profilePic === 'default-avatar.png') {
+      console.log(`User ${user.username}: Using default avatar`);
+      return '/images/default-avatar.png';
+    }
+    
+    // If profile pic is already a full URL
+    if (profilePic.startsWith('http')) {
+      console.log(`User ${user.username}: Using full URL ${profilePic}`);
+      return profilePic;
+    }
+    
+    // Construct the URL with cache-busting
+    const imageUrl = `${baseUrl}/uploads/profile/${profilePic}?t=${Date.now()}`;
+    console.log(`User ${user.username}: Constructed URL ${imageUrl}`);
+    return imageUrl;
+  }, []);
 
   // UI Components for different tabs
   const renderFriendsTab = () => {
     if (friends.length === 0) {
       return (
         <Alert severity="info" sx={{ mt: 2 }}>
-          You don't have any friends yet. Check out the Suggestions tab to find people to connect with!
+          You don&apos;t have any friends yet. Check out the Suggestions tab to find people to connect with!
         </Alert>
       );
     }
@@ -446,7 +451,7 @@ const getProfileImage = (user: FriendUser): string => {
     if (pendingRequests.length === 0) {
       return (
         <Alert severity="info" sx={{ mt: 2 }}>
-          You don't have any pending friend requests.
+          You don&apos;t have any pending friend requests.
         </Alert>
       );
     }
@@ -531,7 +536,7 @@ const getProfileImage = (user: FriendUser): string => {
     if (sentRequests.length === 0) {
       return (
         <Alert severity="info" sx={{ mt: 2 }}>
-          You haven't sent any friend requests.
+          You haven&apos;t sent any friend requests.
         </Alert>
       );
     }
@@ -699,7 +704,7 @@ const getProfileImage = (user: FriendUser): string => {
     if (blockedUsers.length === 0) {
       return (
         <Alert severity="info" sx={{ mt: 2 }}>
-          You haven't blocked any users.
+          You haven&apos;t blocked any users.
         </Alert>
       );
     }
