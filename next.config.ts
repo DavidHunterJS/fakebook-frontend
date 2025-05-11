@@ -2,7 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   images: {
-    domains: ['https://fakebook-backend-a2a77a290552.herokuapp.com/'],
+    domains: [
+      'fakebook-backend-a2a77a290552.herokuapp.com',
+      'localhost'
+    ],
   },
 }
 
