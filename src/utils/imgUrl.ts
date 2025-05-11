@@ -6,7 +6,7 @@ type ImageType = 'profile' | 'cover' | 'post';
 // Define a mapping of image types to their folder paths
 const TYPE_TO_FOLDER_MAP: Record<ImageType, string> = {
   profile: 'profile',
-  cover: 'XXX', // IMPORTANT: Using 'covers' (plural)
+  cover: 'covers', // IMPORTANT: Using 'covers' (plural)
   post: 'posts'
 };
 
