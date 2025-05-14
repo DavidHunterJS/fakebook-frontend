@@ -29,6 +29,7 @@ export interface Post {
   text?: string;
   media?: string[];   // Array of image/video filenames or URLs
   image?: string;     // Optional: Primarily used by frontend after extracting from media[0]
+  imageUrl?: string;
   likes: string[];    // Array of user IDs who liked the post
   comments: Comment[] | string[]; // Array of Comment objects or comment IDs
   visibility?: 'public' | 'friends' | 'private'; // Post visibility

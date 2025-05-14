@@ -34,50 +34,34 @@ const PRODUCTION_BACKEND_URL = 'https://fakebook-backend-a2a77a290552.herokuapp.
  * @returns The full URL of the image
  */
 export const getFullImageUrl = (filenameOrUrl?: string, type: ImageType = 'profile'): string => {
-  // If no filename is provided, return the default image for the specified type
   if (!filenameOrUrl) {
     return DEFAULT_IMAGE_MAP[type];
   }
 
-  // Trim any whitespace from the input
   const trimmedInput = filenameOrUrl.trim();
-  
-  // NEW: If it's a localhost URL, replace with production URL
+
+  // Check for localhost and replace only in production
   if (trimmedInput.startsWith('http://localhost:5000/')) {
-    const fixedUrl = trimmedInput.replace('http://localhost:5000', PRODUCTION_BACKEND_URL);
-    console.log(`[getFullImageUrl] Replacing localhost URL: "${trimmedInput}" → "${fixedUrl}"`);
-    return fixedUrl;
+    if (process.env.NODE_ENV === 'production') {
+      const fixedUrl = trimmedInput.replace('http://localhost:5000', PRODUCTION_BACKEND_URL);
+      console.log(`[getFullImageUrl] Replacing localhost URL: "${trimmedInput}" → "${fixedUrl}"`);
+      return fixedUrl;
+    }
+    return trimmedInput; // In development, keep localhost URL
   }
-  
-  // If the input is already a URL, return it directly
+
   if (trimmedInput.startsWith('http://') || trimmedInput.startsWith('https://')) {
     return trimmedInput;
   }
-  
-  // If the input is a default filename, return the corresponding default image
+
   if (DEFAULT_FILENAMES.has(trimmedInput)) {
     return DEFAULT_IMAGE_MAP[type === 'profile' ? 'profile' : 'cover'];
   }
 
-  // Get the correct folder path for the image type
   const folderPath = TYPE_TO_FOLDER_MAP[type];
-  
-  // Log for debugging
-  if (type === 'cover') {
-    console.log(`Using "${folderPath}" (plural) for folder path of cover image`);
-  }
-  
-  // Ensure we have a valid backend URL
-  if (!BACKEND_STATIC_URL) {
-    console.error('BACKEND_STATIC_URL is not defined! Using production URL as fallback.');
-  }
-  
-  // Construct the full URL with a cache-busting timestamp
   const cacheBuster = `t=${Date.now()}`;
   const fullUrl = `${BACKEND_STATIC_URL}/uploads/${folderPath}/${trimmedInput}?${cacheBuster}`;
-  
-  // Log details for debugging
+
   console.log(`[getFullImageUrl] Type: "${type}", FolderPath: "${folderPath}", Final URL: "${fullUrl}"`);
-  
   return fullUrl;
 };
