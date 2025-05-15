@@ -3,7 +3,8 @@ import { Box, TextField, Avatar, Button } from '@mui/material';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import axios, { AxiosError } from 'axios'; // Import AxiosError type
+import axios from '../../lib/axios'; // Keep your original import
+import { AxiosError } from 'axios'; // Import only the type from axios
 import useAuth from '../../hooks/useAuth';
 import { getFullImageUrl } from '../../utils/imgUrl';
 
