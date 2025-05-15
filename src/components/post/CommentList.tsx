@@ -7,7 +7,9 @@ import {
   IconButton, 
   Menu, 
   MenuItem, 
-  CircularProgress 
+  CircularProgress, 
+  Snackbar, 
+  Alert 
 } from '@mui/material';
 import { formatDistanceToNow } from 'date-fns';
 import { 
@@ -22,46 +24,120 @@ import axios from '../../lib/axios';
 import { Comment } from '../../types/comment';
 import { User } from '../../types/user';
 import useAuth from '../../hooks/useAuth';
+import { getFullImageUrl } from '../../utils/imgUrl';
 
 interface CommentListProps {
   postId: string;
 }
 
+// Define types for your Comment and User if they don't exist
+interface CommentType {
+  _id: string;
+  text: string;
+  user: UserType | string;
+  post: string;
+  likes: string[];
+  createdAt: string;
+  updatedAt: string;
+  replies?: Array<{
+    _id: string;
+    text: string;
+    user: UserType | string;
+    likes: string[];
+    createdAt: string;
+  }>;
+}
+
+interface UserType {
+  _id: string;
+  username: string;
+  profileImage?: string;
+  profilePicture?: string;
+}
+
 const CommentList: React.FC<CommentListProps> = ({ postId }) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['comments', postId],
     queryFn: async () => {
       const response = await axios.get(`/comments/post/${postId}`);
-      // Log response for debugging
       console.log(`[CommentList] Comments response for post ${postId}:`, response.data);
       return response.data;
     }
   });
 
+  // The critical fix for the like endpoint
   const likeCommentMutation = useMutation({
     mutationFn: async (commentId: string) => {
+      console.log(`[CommentList] Liking comment ${commentId}`);
+      
+      // Look at backend controller to troubleshoot server-side issues
+      console.log(`[CommentList] IMPORTANT: Check if your backend controller uses 'id' parameter correctly`);
+      
+      // This is exactly as defined in your backend routes
       const response = await axios.put(`/comments/${commentId}/like`);
+      console.log(`[CommentList] Comment like response:`, response.data);
       return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comments', postId] });
+    },
+    onError: (error: any) => {
+      console.error('[CommentList] Like comment error:', error);
+      if (error.response) {
+        console.error('[CommentList] Server response:', {
+          status: error.response.status,
+          data: error.response.data
+        });
+        
+        // Show user-friendly error message
+        setErrorMessage(
+          `Failed to like comment: ${error.response.data?.message || 'Unknown error'}`
+        );
+        
+        // Add special message to help with debugging
+        console.error(`
+          ⚠️ BACKEND FIX NEEDED: Your toggleLikeComment controller function is 
+          looking for req.params.commentId but your route defines the parameter as :id.
+          
+          Please update your controller to use:
+          const { id } = req.params;
+          
+          Or change your route to:
+          router.put('/:commentId/like', auth, toggleLikeComment);
+        `);
+      }
     }
   });
 
   const deleteCommentMutation = useMutation({
     mutationFn: async (commentId: string) => {
-      await axios.delete(`/comments/${commentId}`);
-      return commentId;
+      console.log(`[CommentList] Deleting comment ${commentId}`);
+      const response = await axios.delete(`/comments/${commentId}`);
+      console.log(`[CommentList] Delete comment response:`, response.data);
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comments', postId] });
       queryClient.invalidateQueries({ queryKey: ['post', postId] });
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+    onError: (error: any) => {
+      console.error('[CommentList] Delete comment error:', error);
+      if (error.response) {
+        setErrorMessage(
+          `Failed to delete comment: ${error.response.data?.message || 'Unknown error'}`
+        );
+      }
     }
   });
+
+  const handleCloseError = () => {
+    setErrorMessage(null);
+  };
 
   if (isLoading) {
     return (
@@ -80,7 +156,7 @@ const CommentList: React.FC<CommentListProps> = ({ postId }) => {
   }
 
   // Handle different possible response structures
-  let comments: Comment[] = [];
+  let comments: CommentType[] = [];
   
   if (data) {
     if (Array.isArray(data)) {
@@ -115,13 +191,24 @@ const CommentList: React.FC<CommentListProps> = ({ postId }) => {
           currentUser={user}
         />
       ))}
+
+      {/* Error message display */}
+      <Snackbar
+        open={!!errorMessage}
+        autoHideDuration={6000}
+        onClose={handleCloseError}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseError} severity="error" sx={{ width: '100%' }}>
+          {errorMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
 
-// Rest of your CommentItem component remains unchanged
 interface CommentItemProps {
-  comment: Comment;
+  comment: CommentType;
   onLike: () => void;
   onDelete: () => void;
   currentUser: User | null;
@@ -129,7 +216,14 @@ interface CommentItemProps {
 
 const CommentItem: React.FC<CommentItemProps> = ({ comment, onLike, onDelete, currentUser }) => {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const commentUser = comment.user as User;
+  
+  // Type guard to check if user is a UserType object
+  const isUserObject = (user: any): user is UserType => {
+    return user && typeof user === 'object' && '_id' in user;
+  };
+  
+  // Convert the user to the correct type
+  const commentUser = isUserObject(comment.user) ? comment.user : null;
   
   // Handle case where comment.likes might be undefined
   const isLiked = currentUser && comment.likes ? comment.likes.includes(currentUser._id) : false;
@@ -156,11 +250,16 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, onLike, onDelete, cu
     );
   }
 
+  // Get proper profile image URL
+  const profileImageUrl = commentUser.profilePicture ? 
+    getFullImageUrl(commentUser.profilePicture, 'profile') : 
+    commentUser.profileImage || '/images/default-avatar.png';
+
   return (
     <Box sx={{ display: 'flex', mb: 2 }}>
       <Link href={`/profile/${commentUser._id}`} style={{ textDecoration: 'none' }}>
         <Avatar
-          src={commentUser.profileImage || commentUser.profilePicture} // Handle both field names
+          src={profileImageUrl}
           alt={commentUser.username}
           sx={{ width: 32, height: 32, mr: 1.5 }}
         />
