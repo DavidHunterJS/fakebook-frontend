@@ -20,19 +20,20 @@ import {
 } from '@mui/icons-material';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios, { AxiosError } from 'axios'; // Import AxiosError type
+import axios from '../../lib/axios'; // Keep your original import
+import { AxiosError } from 'axios'; // Import only the type from axios
 import { User } from '../../types/user';
 import useAuth from '../../hooks/useAuth';
 import { getFullImageUrl } from '../../utils/imgUrl';
 
-interface CommentListProps {
-  postId: string;
+// Define an interface for error response data
+interface ErrorResponseData {
+  message?: string;
+  [key: string]: unknown;
 }
 
-// Define error response type
-interface ErrorResponse {
-  message: string;
-  [key: string]: unknown;
+interface CommentListProps {
+  postId: string;
 }
 
 // Define types for your Comment and User if they don't exist
@@ -90,7 +91,7 @@ const CommentList: React.FC<CommentListProps> = ({ postId }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comments', postId] });
     },
-    onError: (error: AxiosError<ErrorResponse>) => {
+    onError: (error: AxiosError<ErrorResponseData>) => {
       console.error('[CommentList] Like comment error:', error);
       if (error.response) {
         console.error('[CommentList] Server response:', {
@@ -130,7 +131,7 @@ const CommentList: React.FC<CommentListProps> = ({ postId }) => {
       queryClient.invalidateQueries({ queryKey: ['post', postId] });
       queryClient.invalidateQueries({ queryKey: ['posts'] });
     },
-    onError: (error: AxiosError<ErrorResponse>) => {
+    onError: (error: AxiosError<ErrorResponseData>) => {
       console.error('[CommentList] Delete comment error:', error);
       if (error.response) {
         setErrorMessage(
