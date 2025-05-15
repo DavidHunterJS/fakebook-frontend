@@ -20,14 +20,19 @@ import {
 } from '@mui/icons-material';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from '../../lib/axios';
-import { Comment } from '../../types/comment';
+import axios, { AxiosError } from 'axios'; // Import AxiosError type
 import { User } from '../../types/user';
 import useAuth from '../../hooks/useAuth';
 import { getFullImageUrl } from '../../utils/imgUrl';
 
 interface CommentListProps {
   postId: string;
+}
+
+// Define error response type
+interface ErrorResponse {
+  message: string;
+  [key: string]: unknown;
 }
 
 // Define types for your Comment and User if they don't exist
@@ -85,7 +90,7 @@ const CommentList: React.FC<CommentListProps> = ({ postId }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comments', postId] });
     },
-    onError: (error: any) => {
+    onError: (error: AxiosError<ErrorResponse>) => {
       console.error('[CommentList] Like comment error:', error);
       if (error.response) {
         console.error('[CommentList] Server response:', {
@@ -125,7 +130,7 @@ const CommentList: React.FC<CommentListProps> = ({ postId }) => {
       queryClient.invalidateQueries({ queryKey: ['post', postId] });
       queryClient.invalidateQueries({ queryKey: ['posts'] });
     },
-    onError: (error: any) => {
+    onError: (error: AxiosError<ErrorResponse>) => {
       console.error('[CommentList] Delete comment error:', error);
       if (error.response) {
         setErrorMessage(
@@ -218,8 +223,8 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, onLike, onDelete, cu
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   
   // Type guard to check if user is a UserType object
-  const isUserObject = (user: any): user is UserType => {
-    return user && typeof user === 'object' && '_id' in user;
+  const isUserObject = (user: unknown): user is UserType => {
+    return Boolean(user) && typeof user === 'object' && user !== null && '_id' in user;
   };
   
   // Convert the user to the correct type

@@ -3,12 +3,18 @@ import { Box, TextField, Avatar, Button } from '@mui/material';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from '../../lib/axios';
+import axios, { AxiosError } from 'axios'; // Import AxiosError type
 import useAuth from '../../hooks/useAuth';
 import { getFullImageUrl } from '../../utils/imgUrl';
 
 interface CommentFormProps {
   postId: string;
+}
+
+// Define error response type
+interface ErrorResponse {
+  message: string;
+  [key: string]: unknown;
 }
 
 const validationSchema = Yup.object({
@@ -38,7 +44,7 @@ const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       formik.resetForm();
     },
-    onError: (error: any) => {
+    onError: (error: AxiosError<ErrorResponse>) => {
       console.error(`[CommentForm] Error posting comment:`, error);
       if (error.response) {
         console.error(`[CommentForm] Server responded with:`, {

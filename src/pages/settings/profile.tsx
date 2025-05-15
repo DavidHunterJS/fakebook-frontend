@@ -23,9 +23,13 @@ interface ApiError {
   response?: {
     data?: {
       message?: string;
+      [key: string]: unknown;
     };
+    status?: number;
+    [key: string]: unknown;
   };
   message?: string;
+  [key: string]: unknown;
 }
 
 interface ProfileFormData {
@@ -164,9 +168,9 @@ const EditProfilePage: FC = () => {
       console.error('[EditProfilePage] handleSubmitDetails - Error:', err);
       
       // Log more details if available
-      if ((err as any).response) {
-        console.error('[EditProfilePage] handleSubmitDetails - Response data:', (err as any).response.data);
-        console.error('[EditProfilePage] handleSubmitDetails - Status:', (err as any).response.status);
+      if (error.response) {
+        console.error('[EditProfilePage] handleSubmitDetails - Response data:', error.response.data);
+        console.error('[EditProfilePage] handleSubmitDetails - Status:', error.response.status);
       }
       
       setError(error.response?.data?.message || error.message || 'Failed to update profile details.');
