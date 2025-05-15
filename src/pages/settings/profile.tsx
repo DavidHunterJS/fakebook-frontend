@@ -120,20 +120,55 @@ const EditProfilePage: FC = () => {
     }
   };
 
+  // FIXED: Handle submit details function with improved bio handling
   const handleSubmitDetails = async (e: FormEvent) => {
     e.preventDefault();
     setLoadingDetails(true);
     setError(null);
     setSuccessMessage(null);
+    
     try {
-      const res = await api.put('/users/profile', formData, {
-        headers: { Authorization: `Bearer ${token}` },
+      // Log what we're sending for debugging
+      console.log('[EditProfilePage] handleSubmitDetails - Sending data:', {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        bio: formData.bio,
+        location: formData.location
       });
+      
+      // Only send the fields that should be updated
+      const updateData = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        bio: formData.bio || '',  // Ensure bio is a string, even if empty
+        location: formData.location || ''  // Ensure location is a string, even if empty
+      };
+      
+      // Make the API call
+      const res = await api.put('/users/profile', updateData, {
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+      });
+      
+      // Log what we got back
+      console.log('[EditProfilePage] handleSubmitDetails - Response:', res.data);
+      
+      // Update the user in context
       updateUserInContext(res.data);
       setSuccessMessage('Profile details updated successfully!');
     } catch (err: unknown) {
-      // Cast err to ApiError type before accessing its properties
+      // Enhanced error logging
       const error = err as ApiError;
+      console.error('[EditProfilePage] handleSubmitDetails - Error:', err);
+      
+      // Log more details if available
+      if ((err as any).response) {
+        console.error('[EditProfilePage] handleSubmitDetails - Response data:', (err as any).response.data);
+        console.error('[EditProfilePage] handleSubmitDetails - Status:', (err as any).response.status);
+      }
+      
       setError(error.response?.data?.message || error.message || 'Failed to update profile details.');
     } finally {
       setLoadingDetails(false);
@@ -171,7 +206,8 @@ const EditProfilePage: FC = () => {
       const res = await api.post(endpoint, uploadFormData, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': undefined,
+          // No need to set Content-Type for FormData - browser will set it with boundary
+          // 'Content-Type': 'multipart/form-data', 
         },
       });
 
@@ -213,7 +249,6 @@ const EditProfilePage: FC = () => {
   const finalCoverSrc = coverPhotoPreview || getFullImageUrl(user.coverPhoto, 'cover'); // Type is 'cover'
   console.log(`[EditProfilePage] Rendering. Final Avatar Src: "${finalAvatarSrc}", User Profile Pic from context: "${user.profilePicture}"`);
   console.log(`[EditProfilePage] Rendering. Final Cover Src: "${finalCoverSrc}", User Cover Photo from context: "${user.coverPhoto}"`);
-
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
@@ -322,6 +357,7 @@ const EditProfilePage: FC = () => {
         <Typography variant="h6" gutterBottom sx={{mt: 3}}>Profile Details</Typography>
         <Box component="form" onSubmit={handleSubmitDetails} noValidate sx={{ mt: 1 }}>
           <Grid container spacing={2}>
+            {/* Keep using size prop as in your original code */}
             <Grid size={{xs:12, sm:6}}>
               <TextField
                 margin="normal"
@@ -386,6 +422,7 @@ const EditProfilePage: FC = () => {
                 value={formData.bio}
                 onChange={handleChange}
                 placeholder="Tell us about yourself..."
+                inputProps={{ maxLength: 500 }} // Add max length
               />
             </Grid>
             <Grid size={{xs:12}} >
