@@ -31,11 +31,13 @@ const CommentList: React.FC<CommentListProps> = ({ postId }) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: comments, isLoading, error } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['comments', postId],
     queryFn: async () => {
       const response = await axios.get(`/comments/post/${postId}`);
-      return response.data as Comment[];
+      // Log response for debugging
+      console.log(`[CommentList] Comments response for post ${postId}:`, response.data);
+      return response.data;
     }
   });
 
@@ -72,11 +74,28 @@ const CommentList: React.FC<CommentListProps> = ({ postId }) => {
   if (error) {
     return (
       <Typography color="error" align="center" sx={{ my: 2 }}>
-        Error loading comments
+        Error loading comments: {(error as Error).message}
       </Typography>
     );
   }
 
+  // Handle different possible response structures
+  let comments: Comment[] = [];
+  
+  if (data) {
+    if (Array.isArray(data)) {
+      // If data is directly an array
+      comments = data;
+    } else if (data.comments && Array.isArray(data.comments)) {
+      // If comments are nested under a 'comments' property
+      comments = data.comments;
+    } else if (typeof data === 'object') {
+      // Log unexpected structure for debugging
+      console.error('[CommentList] Unexpected comments data structure:', data);
+    }
+  }
+
+  // Now safely check if we have comments to display
   if (!comments || comments.length === 0) {
     return (
       <Typography variant="body2" color="text.secondary" align="center" sx={{ my: 2 }}>
@@ -100,6 +119,7 @@ const CommentList: React.FC<CommentListProps> = ({ postId }) => {
   );
 };
 
+// Rest of your CommentItem component remains unchanged
 interface CommentItemProps {
   comment: Comment;
   onLike: () => void;
@@ -110,8 +130,10 @@ interface CommentItemProps {
 const CommentItem: React.FC<CommentItemProps> = ({ comment, onLike, onDelete, currentUser }) => {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const commentUser = comment.user as User;
-  const isLiked = currentUser ? comment.likes.includes(currentUser._id) : false;
-  const isAuthor = currentUser && commentUser._id === currentUser._id;
+  
+  // Handle case where comment.likes might be undefined
+  const isLiked = currentUser && comment.likes ? comment.likes.includes(currentUser._id) : false;
+  const isAuthor = currentUser && commentUser && commentUser._id === currentUser._id;
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -126,11 +148,19 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, onLike, onDelete, cu
     handleMenuClose();
   };
 
+  // Add null checks for commentUser
+  if (!commentUser) {
+    console.error('[CommentItem] Comment has no valid user:', comment);
+    return (
+      <Typography color="error">Invalid comment data</Typography>
+    );
+  }
+
   return (
     <Box sx={{ display: 'flex', mb: 2 }}>
       <Link href={`/profile/${commentUser._id}`} style={{ textDecoration: 'none' }}>
         <Avatar
-          src={commentUser.profileImage}
+          src={commentUser.profileImage || commentUser.profilePicture} // Handle both field names
           alt={commentUser.username}
           sx={{ width: 32, height: 32, mr: 1.5 }}
         />
@@ -202,7 +232,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, onLike, onDelete, cu
           <Typography variant="caption" color="text.secondary">
             {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
           </Typography>
-          {comment.likes.length > 0 && (
+          {comment.likes && comment.likes.length > 0 && (
             <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
               <FavoriteIcon color="error" sx={{ fontSize: 12, mr: 0.5 }} />
               <Typography variant="caption" color="text.secondary">
