@@ -37,7 +37,7 @@ export interface Post {
   reported?: boolean; // Optional flag if the post is reported
   shares?: string[];  // Optional array of user IDs who shared, or Share objects
   reportReasons?: ReportReason[]; // Array of report reason objects
-  createdAt: string | Date;
+  createdAt: string;
   updatedAt: string | Date;
 
   // Optional fields often added during processing/aggregation

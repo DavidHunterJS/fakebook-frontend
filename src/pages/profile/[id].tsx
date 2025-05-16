@@ -1,6 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
+import ImageList from '@mui/material/ImageList';
+import ImageListItem from '@mui/material/ImageListItem';
+import ImageListItemBar from '@mui/material/ImageListItemBar';
+import { useMediaQuery, useTheme } from '@mui/material';
 import {
   Container,
   Box,
@@ -19,6 +23,9 @@ import {
   PersonAdd as PersonAddIcon,
   Edit as EditIcon,
   Person as PersonIcon, // Added for empty friends display
+  Image as ImageIcon, 
+  Favorite as LikeIcon,
+  Comment as CommentIcon
 } from '@mui/icons-material';
 import useAuth from '../../hooks/useAuth'; // Adjust path if needed
 import api from '../../utils/api'; // Adjust path if needed
@@ -80,13 +87,29 @@ interface Profile extends User {
   friends?: FriendUser[];
 }
 
+interface Photo {
+  _id: string;
+  url: string;
+  filename: string;
+  caption?: string;
+  createdAt: string;
+  postId?: string;
+  albumId?: string;
+  likes?: number;
+  comments?: number;
+}
 
 const ProfilePage: React.FC = () => {
   const router = useRouter();
   const { id } = router.query;
   const { user: currentUser, isAuthenticated } = useAuth();
-  const [isOwnProfile, setIsOwnProfile] = useState<boolean | null>(null);
+  const theme = useTheme();
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMediumScreen = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
+  // State variables - grouped by functionality
+  // Profile and loading states
+  const [isOwnProfile, setIsOwnProfile] = useState<boolean | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +122,13 @@ const ProfilePage: React.FC = () => {
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [friendsError, setFriendsError] = useState<string | null>(null);
-  const [friendsInitialized, setFriendsInitialized] = useState(false); // New state to track if friends were initialized
+  const [friendsInitialized, setFriendsInitialized] = useState(false);
+  
+  // Photos data
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [photosError, setPhotosError] = useState<string | null>(null);
+  const [photosInitialized, setPhotosInitialized] = useState(false);
   
   // Bio editing state
   const [isEditingBio, setIsEditingBio] = useState(false);
@@ -126,7 +155,7 @@ const ProfilePage: React.FC = () => {
   const [savingWorkEdu, setSavingWorkEdu] = useState(false);
   const [workEduError, setWorkEduError] = useState<string | null>(null);
 
-  // Simplified API request helper - now memoized with useCallback
+  // API request helper - memoized with useCallback
   const makeApiRequest = useCallback(async (url: string, method: 'get' | 'post' | 'put' | 'delete' = 'get', data?: unknown) => {
     const addDebug = (msg: string) => { console.log(msg); setDebug(prev => [...prev, msg]); };
     addDebug(`Attempting ${method.toUpperCase()} request to relative path: ${url}`);
@@ -152,23 +181,23 @@ const ProfilePage: React.FC = () => {
         }
         throw error;
     }
-  }, [setDebug]); // Add setDebug as a dependency
+  }, []);
 
-  // Fetch friends - updated with the working approach from your friends page
-const fetchFriends = useCallback(async () => {
-  if (!profile || typeof id !== 'string') return;
-  
-  // Check if we already have processed friends data
-  if (friendsInitialized && friends.length > 0) {
-    setDebug(prev => [...prev, `Friends already initialized (${friends.length} friends), skipping fetch`]);
-    return;
-  }
-  
-  // Check if the profile has embedded friends data first
-  const profileFriends = profile.friends;
-  if (profileFriends && Array.isArray(profileFriends) && profileFriends.length > 0) {
-    setDebug(prev => [...prev, `Using ${profileFriends.length} friends already loaded in profile data`]);
+  // Fetch friends function
+  const fetchFriends = useCallback(async () => {
+    if (!profile || typeof id !== 'string') return;
     
+    // Check if we already have processed friends data
+    if (friendsInitialized && friends.length > 0) {
+      setDebug(prev => [...prev, `Friends already initialized (${friends.length} friends), skipping fetch`]);
+      return;
+    }
+    
+    // Check if the profile has embedded friends data first
+    const profileFriends = profile.friends;
+    if (profileFriends && Array.isArray(profileFriends) && profileFriends.length > 0) {
+      setDebug(prev => [...prev, `Using ${profileFriends.length} friends already loaded in profile data`]);
+      
       // Process the existing friends data
       const friendsList = profileFriends as FriendUser[];
       
@@ -312,8 +341,174 @@ const fetchFriends = useCallback(async () => {
     }
   }, [id, profile, makeApiRequest, currentUser, friendsInitialized, friends.length]);
 
+  // Fetch photos function
+  const fetchPhotos = useCallback(async () => {
+    if (!profile || typeof id !== 'string') return;
+    
+    // Check if we already have processed photos data
+    if (photosInitialized && photos.length > 0) {
+      setDebug(prev => [...prev, `Photos already initialized (${photos.length} photos), skipping fetch`]);
+      return;
+    }
+    
+    // Set loading state
+    setLoadingPhotos(true);
+    setPhotosError(null);
+    
+    try {
+      // Try to fetch photos from user's posts first
+      setDebug(prev => [...prev, `Fetching photos from user posts for ID: ${id}`]);
+      
+      // Attempt to fetch posts with media if we don't already have them
+      let postsWithMedia = posts;
+      if (!posts.length) {
+        try {
+          const postsResponse = await makeApiRequest(`/posts/user/${id}`);
+          if (postsResponse?.data?.posts || Array.isArray(postsResponse?.data)) {
+            postsWithMedia = postsResponse.data.posts || postsResponse.data;
+          }
+        } catch (e) {
+          setDebug(prev => [...prev, `Error fetching posts for photos: ${(e as Error).message}`]);
+        }
+      }
+      
+      // Extract media from posts
+      const photosFromPosts: Photo[] = [];
+      
+      if (postsWithMedia.length > 0) {
+        // Process each post to extract media
+        postsWithMedia.forEach(post => {
+          if (post.media && Array.isArray(post.media) && post.media.length > 0) {
+            // Add each media item as a photo
+            post.media.forEach((mediaFilename: string) => {
+              photosFromPosts.push({
+                _id: `${post._id}-${mediaFilename}`, // Create a unique ID
+                url: getFullImageUrl(mediaFilename, 'post'),
+                filename: mediaFilename,
+                caption: post.content?.substring(0, 100) || '',
+                createdAt: post.createdAt || new Date().toISOString(),
+                postId: post._id,
+                likes: post.likes?.length || 0,
+                comments: post.comments?.length || 0
+              });
+            });
+          }
+        });
+        
+        setDebug(prev => [...prev, `Extracted ${photosFromPosts.length} photos from posts`]);
+      }
+      
+      // Try to fetch user's albums if available
+      let photosFromAlbums: Photo[] = [];
+      try {
+        const albumsResponse = await makeApiRequest(`/users/${id}/albums`);
+        if (albumsResponse?.data?.albums && Array.isArray(albumsResponse.data.albums)) {
+          const albums = albumsResponse.data.albums;
+          
+          // Process each album to extract photos
+          for (const album of albums) {
+            if (album.photos && Array.isArray(album.photos) && album.photos.length > 0) {
+              // Add each photo from the album
+              album.photos.forEach((photo: any) => {
+                photosFromAlbums.push({
+                  _id: photo._id || `album-${album._id}-${photo.filename}`,
+                  url: getFullImageUrl(photo.filename, 'post'),
+                  filename: photo.filename,
+                  caption: photo.caption || album.title || '',
+                  createdAt: (photo.createdAt || album.createdAt || new Date().toISOString()) as string,
+                  albumId: album._id,
+                  likes: photo.likes?.length || 0,
+                  comments: photo.comments?.length || 0
+                });
+              });
+            }
+          }
+          
+          setDebug(prev => [...prev, `Extracted ${photosFromAlbums.length} photos from albums`]);
+        }
+      } catch (e) {
+        // Albums endpoint might not exist, just log and continue
+        setDebug(prev => [...prev, `Error fetching albums (might not be implemented): ${(e as Error).message}`]);
+      }
+      
+      // Try to fetch profile and cover photos
+      const profilePhotos: Photo[] = [];
+      
+      if (profile.profilePicture && profile.profilePicture !== 'default-avatar.png') {
+        profilePhotos.push({
+          _id: `profile-${profile._id}`,
+          url: getFullImageUrl(profile.profilePicture, 'profile'),
+          filename: profile.profilePicture,
+          caption: 'Profile Picture',
+          createdAt: (profile.updatedAt || profile.createdAt || new Date().toISOString()) as string,
+        });
+      }
+      
+      if (profile.coverPhoto && profile.coverPhoto !== 'default-cover.png') {
+        profilePhotos.push({
+          _id: `cover-${profile._id}`,
+          url: getFullImageUrl(profile.coverPhoto, 'cover'),
+          filename: profile.coverPhoto,
+          caption: 'Cover Photo',
+          createdAt: (profile.updatedAt || profile.createdAt || new Date().toISOString()) as string,
+        });
+      }
+      
+      setDebug(prev => [...prev, `Added ${profilePhotos.length} profile/cover photos`]);
+      
+      // Combine all photos
+      const allPhotos = [...profilePhotos, ...photosFromPosts, ...photosFromAlbums];
+      
+      // Sort photos by date (newest first)
+      allPhotos.sort((a, b) => {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+      
+      if (allPhotos.length === 0) {
+        setDebug(prev => [...prev, 'No photos found for this user']);
+      } else {
+        setDebug(prev => [...prev, `Found a total of ${allPhotos.length} photos`]);
+      }
+      
+      // Update state
+      setPhotos(allPhotos);
+      setPhotosInitialized(true);
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      console.error('Error fetching photos:', err);
+      setPhotosError(err.response?.data?.message || err.message || 'Failed to load photos.');
+      setDebug(prev => [...prev, `Error fetching photos: ${err.message}`]);
+    } finally {
+      setLoadingPhotos(false);
+    }
+  }, [id, profile, posts, makeApiRequest, photosInitialized, photos.length]);
+
+  // Get grid columns function
+  const getGridCols = useCallback(() => {
+    if (isSmallScreen) return 2; // 2 columns on small screens
+    if (isMediumScreen) return 3; // 3 columns on medium screens
+    return 4; // 4 columns on large screens
+  }, [isSmallScreen, isMediumScreen]);
+
+  // Photo click handler
+  const handlePhotoClick = useCallback((photo: Photo) => {
+    // If photo is from a post, navigate to the post
+    if (photo.postId) {
+      router.push(`/post/${photo.postId}`);
+    } 
+    // If photo is from an album, navigate to the album
+    else if (photo.albumId) {
+      router.push(`/album/${photo.albumId}`);
+    }
+    // Otherwise, maybe open a modal to view the photo
+    else {
+      // You could implement a modal here
+      window.open(photo.url, '_blank');
+    }
+  }, [router]);
+
   // Handle following a friend
-  const handleFollowFriend = async (friendId: string) => {
+  const handleFollowFriend = useCallback(async (friendId: string) => {
     if (!isAuthenticated || !currentUser) return;
     
     try {
@@ -333,10 +528,10 @@ const fetchFriends = useCallback(async () => {
       console.error('Error following friend:', err);
       setDebug(prev => [...prev, `Error following friend ${friendId}: ${err.message}`]);
     }
-  };
+  }, [isAuthenticated, currentUser, makeApiRequest, setDebug]);
   
   // Handle unfollowing a friend
-  const handleUnfollowFriend = async (friendId: string) => {
+  const handleUnfollowFriend = useCallback(async (friendId: string) => {
     if (!isAuthenticated || !currentUser) return;
     
     try {
@@ -356,10 +551,10 @@ const fetchFriends = useCallback(async () => {
       console.error('Error unfollowing friend:', err);
       setDebug(prev => [...prev, `Error unfollowing friend ${friendId}: ${err.message}`]);
     }
-  };
+  }, [isAuthenticated, currentUser, makeApiRequest, setDebug]);
 
   // Handle bio save
-  const handleSaveBio = async () => {
+  const handleSaveBio = useCallback(async () => {
     if (!currentUser || !profile) return;
     
     setSavingBio(true);
@@ -386,17 +581,17 @@ const fetchFriends = useCallback(async () => {
     } finally {
       setSavingBio(false);
     }
-  };
+  }, [currentUser, profile, bioValue, makeApiRequest, setDebug]);
 
   // Handle cancel bio edit
-  const handleCancelEditBio = () => {
+  const handleCancelEditBio = useCallback(() => {
     setIsEditingBio(false);
     setBioValue(profile?.bio || '');
     setBioError(null);
-  };
+  }, [profile?.bio]);
   
   // Handle save basic info
-  const handleSaveBasicInfo = async () => {
+  const handleSaveBasicInfo = useCallback(async () => {
     if (!currentUser || !profile) return;
     
     setSavingBasicInfo(true);
@@ -422,10 +617,10 @@ const fetchFriends = useCallback(async () => {
     } finally {
       setSavingBasicInfo(false);
     }
-  };
+  }, [currentUser, profile, basicInfoValues, makeApiRequest, setDebug]);
   
   // Handle cancel basic info edit
-  const handleCancelEditBasicInfo = () => {
+  const handleCancelEditBasicInfo = useCallback(() => {
     setIsEditingBasicInfo(false);
     // Reset to profile values
     if (profile) {
@@ -436,10 +631,10 @@ const fetchFriends = useCallback(async () => {
       });
     }
     setBasicInfoError(null);
-  };
+  }, [profile]);
   
   // Handle save work and education
-  const handleSaveWorkEdu = async () => {
+  const handleSaveWorkEdu = useCallback(async () => {
     if (!currentUser || !profile) return;
     
     setSavingWorkEdu(true);
@@ -465,10 +660,10 @@ const fetchFriends = useCallback(async () => {
     } finally {
       setSavingWorkEdu(false);
     }
-  };
+  }, [currentUser, profile, workEduValues, makeApiRequest, setDebug]);
   
   // Handle cancel work and education edit
-  const handleCancelEditWorkEdu = () => {
+  const handleCancelEditWorkEdu = useCallback(() => {
     setIsEditingWorkEdu(false);
     // Reset to profile values
     if (profile) {
@@ -478,7 +673,43 @@ const fetchFriends = useCallback(async () => {
       });
     }
     setWorkEduError(null);
-  };
+  }, [profile]);
+
+  // Handle tab change
+  const handleTabChange = useCallback((event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+  }, []);
+
+  // Handle follow toggle
+  const handleFollowToggle = useCallback(async () => {
+    if (!isAuthenticated || typeof id !== 'string' || !profile || !currentUser) return;
+
+    const isCurrentlyFollowing = isFollowing;
+    const endpoint = isCurrentlyFollowing ? `/users/${id}/unfollow` : `/users/${id}/follow`;
+
+    try {
+      await makeApiRequest(endpoint, 'post');
+      setIsFollowing(!isCurrentlyFollowing);
+      setProfile(prevProfile => {
+        if (!prevProfile) return null;
+        const currentFollowers = prevProfile.followers || [];
+        let updatedFollowers: string[];
+        if (isCurrentlyFollowing) {
+            updatedFollowers = currentFollowers.filter(followerId => String(followerId) !== currentUser._id);
+        } else {
+            updatedFollowers = [...new Set([...currentFollowers, currentUser._id])];
+        }
+        const updatedRelationshipStatus = prevProfile.relationshipStatus
+          ? { ...prevProfile.relationshipStatus, isFollowing: !isCurrentlyFollowing }
+          : undefined;
+        return { ...prevProfile, followers: updatedFollowers, relationshipStatus: updatedRelationshipStatus };
+      });
+    } catch (followErr: unknown) {
+      const err = followErr as ApiError;
+      console.error('Error toggling follow:', err);
+      setError(err.response?.data?.message || err.message || 'Follow action failed.');
+    }
+  }, [isAuthenticated, id, profile, currentUser, isFollowing, makeApiRequest]);
 
   // Process friends data when tab changes
   useEffect(() => {
@@ -486,6 +717,22 @@ const fetchFriends = useCallback(async () => {
       fetchFriends();
     }
   }, [tabValue, fetchFriends, loadingFriends, friendsInitialized]);
+
+  // Process photos data when tab changes
+  useEffect(() => {
+    if (tabValue === 3 && !photosInitialized && !loadingPhotos) {
+      fetchPhotos();
+    }
+  }, [tabValue, fetchPhotos, photosInitialized, loadingPhotos]);
+
+  // Update isOwnProfile when either profile or currentUser changes
+  useEffect(() => {
+    if (profile && currentUser) {
+      setIsOwnProfile(currentUser._id === profile._id);
+    } else {
+      setIsOwnProfile(null);
+    }
+  }, [profile, currentUser]);
 
   useEffect(() => {
     // Handle invalid ID logic
@@ -617,41 +864,7 @@ const fetchFriends = useCallback(async () => {
 
     fetchProfileAndPosts();
 
-  }, [id, currentUser, router, makeApiRequest]); // Added currentUser and router as dependencies
-
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
-  };
-
-  const handleFollowToggle = async () => {
-    if (!isAuthenticated || typeof id !== 'string' || !profile || !currentUser) return;
-
-    const isCurrentlyFollowing = isFollowing;
-    const endpoint = isCurrentlyFollowing ? `/users/${id}/unfollow` : `/users/${id}/follow`;
-
-    try {
-      await makeApiRequest(endpoint, 'post');
-      setIsFollowing(!isCurrentlyFollowing);
-      setProfile(prevProfile => {
-        if (!prevProfile) return null;
-        const currentFollowers = prevProfile.followers || [];
-        let updatedFollowers: string[];
-        if (isCurrentlyFollowing) {
-            updatedFollowers = currentFollowers.filter(followerId => String(followerId) !== currentUser._id);
-        } else {
-            updatedFollowers = [...new Set([...currentFollowers, currentUser._id])];
-        }
-        const updatedRelationshipStatus = prevProfile.relationshipStatus
-          ? { ...prevProfile.relationshipStatus, isFollowing: !isCurrentlyFollowing }
-          : undefined;
-        return { ...prevProfile, followers: updatedFollowers, relationshipStatus: updatedRelationshipStatus };
-      });
-    } catch (followErr: unknown) {
-      const err = followErr as ApiError;
-      console.error('Error toggling follow:', err);
-      setError(err.response?.data?.message || err.message || 'Follow action failed.');
-    }
-  };
+  }, [id, currentUser, router, makeApiRequest]);
 
   if (loading) {
     return <Container sx={{ py: 8, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Container>;
@@ -677,12 +890,10 @@ const fetchFriends = useCallback(async () => {
      );
   }
 
+  // Calculate these after all hooks have been called
   const profileAvatarUrl = getFullImageUrl(profile.profilePicture, 'profile');
-  // --- ENSURE 'cover' (singular) IS PASSED AS TYPE FOR COVER PHOTOS ---
   const coverPhotoUrl = getFullImageUrl(profile.coverPhoto, 'cover');
   console.log(`[coverPhotoUrl] =  ${coverPhotoUrl}`);
-  
-  // -------------------------------------------------------------------
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -1269,7 +1480,106 @@ const fetchFriends = useCallback(async () => {
 
       {/* Photos Tab */}
       <Box sx={{ display: tabValue === 3 ? 'block' : 'none' }}>
-        {/* Photos tab content will go here */}
+        <Paper sx={{ p: 4, borderRadius: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h5">Photos</Typography>
+            {isOwnProfile && (
+              <Button 
+                variant="outlined" 
+                startIcon={<ImageIcon />} 
+                onClick={() => router.push('/photos/upload')}
+              >
+                Upload Photos
+              </Button>
+            )}
+          </Box>
+          
+          {photosError && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {photosError}
+            </Alert>
+          )}
+          
+          {loadingPhotos ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : photos.length > 0 ? (
+            <ImageList 
+              variant="masonry" 
+              cols={getGridCols()} 
+              gap={8}
+            >
+              {photos.map((photo) => (
+                <ImageListItem 
+                  key={photo._id} 
+                  onClick={() => handlePhotoClick(photo)}
+                  sx={{ 
+                    cursor: 'pointer',
+                    '&:hover': {
+                      opacity: 0.9,
+                      transform: 'scale(1.02)',
+                      transition: 'all 0.2s ease-in-out'
+                    }
+                  }}
+                >
+                  <img
+                    src={photo.url}
+                    alt={photo.caption || 'Photo'}
+                    loading="lazy"
+                    style={{ borderRadius: 8 }}
+                    onError={(e) => {
+                      console.error(`Failed to load image: ${photo.url}`);
+                      (e.target as HTMLImageElement).src = '/images/placeholder-image.png';
+                    }}
+                  />
+                  <ImageListItemBar
+                    title={photo.caption}
+                    subtitle={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <LikeIcon fontSize="small" sx={{ mr: 0.5 }} />
+                          {photo.likes || 0}
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <CommentIcon fontSize="small" sx={{ mr: 0.5 }} />
+                          {photo.comments || 0}
+                        </Box>
+                      </Box>
+                    }
+                    sx={{ borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }}
+                  />
+                </ImageListItem>
+              ))}
+            </ImageList>
+          ) : (
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              py: 6, 
+              textAlign: 'center',
+              bgcolor: 'background.default',
+              borderRadius: 1
+            }}>
+              <ImageIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+              <Typography variant="h6" color="text.secondary">
+                {isOwnProfile ? 'You have no photos yet' : `${profile.firstName} has no photos yet`}
+              </Typography>
+              {isOwnProfile && (
+                <Button 
+                  variant="contained" 
+                  startIcon={<ImageIcon />} 
+                  sx={{ mt: 2 }}
+                  onClick={() => router.push('/photos/upload')}
+                >
+                  Upload Photos
+                </Button>
+              )}
+            </Box>
+          )}
+        </Paper>
       </Box>
 
       {process.env.NODE_ENV !== 'production' && ( <Paper sx={{ p: 2, mt: 3, maxHeight: 200, overflow: 'auto', fontSize: '0.7rem' }}> <Typography variant="subtitle2">Debug Info:</Typography> {debug.map((msg, i) => (<Typography key={i} variant="caption" display="block">{msg}</Typography>))} </Paper> )}
