@@ -12,10 +12,13 @@ import {
   Tab,
   CircularProgress,
   Alert,
+  TextField,
+  Grid, // Added for the friends grid
 } from '@mui/material';
 import {
   PersonAdd as PersonAddIcon,
-  Edit as EditIcon
+  Edit as EditIcon,
+  Person as PersonIcon, // Added for empty friends display
 } from '@mui/icons-material';
 import useAuth from '../../hooks/useAuth'; // Adjust path if needed
 import api from '../../utils/api'; // Adjust path if needed
@@ -23,8 +26,6 @@ import { User } from '../../types/user'; // Adjust path if needed
 import { Post } from '../../types/post'; // Adjust path if needed
 import PostCard from '../../components/post/PostCard'; // Adjust path if needed
 import {getFullImageUrl}  from '../../utils/imgUrl'; // Adjust the path as needed
-// --- Helper to construct full image URLs ---
-// const BACKEND_STATIC_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:5000';
 
 // Define a type for API errors
 interface ApiError {
@@ -46,6 +47,11 @@ const isLikelyObjectIdString = (id: string): boolean => {
 };
 // --- End Helper ---
 
+// Extend the User type to include isFollowing property
+interface FriendUser extends User {
+  isFollowing?: boolean;
+}
+
 // Interface for profile data
 interface Profile extends User {
   bio?: string;
@@ -62,6 +68,16 @@ interface Profile extends User {
   friendCount?: number;
   mutualFriends?: User[];
   privacyRestricted?: boolean;
+  // Additional fields for About tab
+  location?: string;
+  birthday?: string;
+  joinedDate?: string;
+  education?: string;
+  work?: string;
+  website?: string;
+  phone?: string;
+  // Friends data
+  friends?: FriendUser[];
 }
 
 
@@ -69,6 +85,7 @@ const ProfilePage: React.FC = () => {
   const router = useRouter();
   const { id } = router.query;
   const { user: currentUser, isAuthenticated } = useAuth();
+  const [isOwnProfile, setIsOwnProfile] = useState<boolean | null>(null);
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -77,6 +94,37 @@ const ProfilePage: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
   const [isFollowing, setIsFollowing] = useState(false);
   const [debug, setDebug] = useState<string[]>([]);
+  
+  // Friends data
+  const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+  const [friendsError, setFriendsError] = useState<string | null>(null);
+  const [friendsInitialized, setFriendsInitialized] = useState(false); // New state to track if friends were initialized
+  
+  // Bio editing state
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [bioValue, setBioValue] = useState('');
+  const [savingBio, setSavingBio] = useState(false);
+  const [bioError, setBioError] = useState<string | null>(null);
+  
+  // Basic info editing state
+  const [isEditingBasicInfo, setIsEditingBasicInfo] = useState(false);
+  const [basicInfoValues, setBasicInfoValues] = useState({
+    firstName: '',
+    lastName: '',
+    location: ''
+  });
+  const [savingBasicInfo, setSavingBasicInfo] = useState(false);
+  const [basicInfoError, setBasicInfoError] = useState<string | null>(null);
+  
+  // Work and Education editing state
+  const [isEditingWorkEdu, setIsEditingWorkEdu] = useState(false);
+  const [workEduValues, setWorkEduValues] = useState({
+    work: '',
+    education: ''
+  });
+  const [savingWorkEdu, setSavingWorkEdu] = useState(false);
+  const [workEduError, setWorkEduError] = useState<string | null>(null);
 
   // Simplified API request helper - now memoized with useCallback
   const makeApiRequest = useCallback(async (url: string, method: 'get' | 'post' | 'put' | 'delete' = 'get', data?: unknown) => {
@@ -106,6 +154,339 @@ const ProfilePage: React.FC = () => {
     }
   }, [setDebug]); // Add setDebug as a dependency
 
+  // Fetch friends - updated with the working approach from your friends page
+const fetchFriends = useCallback(async () => {
+  if (!profile || typeof id !== 'string') return;
+  
+  // Check if we already have processed friends data
+  if (friendsInitialized && friends.length > 0) {
+    setDebug(prev => [...prev, `Friends already initialized (${friends.length} friends), skipping fetch`]);
+    return;
+  }
+  
+  // Check if the profile has embedded friends data first
+  const profileFriends = profile.friends;
+  if (profileFriends && Array.isArray(profileFriends) && profileFriends.length > 0) {
+    setDebug(prev => [...prev, `Using ${profileFriends.length} friends already loaded in profile data`]);
+    
+      // Process the existing friends data
+      const friendsList = profileFriends as FriendUser[];
+      
+      if (currentUser) {
+        const friendsWithFollowingStatus = friendsList.map(friend => {
+          if (friend.isFollowing !== undefined) return friend;
+          
+          // Check if this friend is in the current user's following list
+          const isFollowing = currentUser.following && Array.isArray(currentUser.following) ? 
+            currentUser.following.some(followedId => String(followedId) === String(friend._id)) : 
+            false;
+          
+          return { ...friend, isFollowing };
+        });
+        
+        setFriends(friendsWithFollowingStatus);
+      } else {
+        setFriends(friendsList);
+      }
+      
+      setFriendsInitialized(true); // Mark as initialized
+      return; // Exit early since we already have the data
+    }
+    
+    // Only now set loading, since we know we need to fetch
+    setLoadingFriends(true);
+    setFriendsError(null);
+    
+    try {
+      // APPROACH 1: If viewing own profile, use the working friends endpoint from friends page
+      if (currentUser && profile._id === currentUser._id) {
+        setDebug(prev => [...prev, `Fetching own friends from /friends endpoint`]);
+        
+        try {
+          const response = await makeApiRequest('/friends');
+          if (response?.data && response.data.friends) {
+            const friendsData = response.data.friends;
+            setDebug(prev => [...prev, `Found ${friendsData.length} friends via /friends endpoint`]);
+            
+            setFriends(friendsData);
+            setFriendsInitialized(true);
+            setLoadingFriends(false);
+            return;
+          }
+        } catch (e) {
+          setDebug(prev => [...prev, `Failed to get friends from /friends endpoint, trying alternative`]);
+        }
+      }
+      
+      // APPROACH 2: Try /users/:id endpoint which might include friends
+      try {
+        setDebug(prev => [...prev, `Trying to get user profile with friends using /users/${id}`]);
+        const response = await makeApiRequest(`/users/${id}`);
+        
+        if (response?.data) {
+          const userData = response.data;
+          if (userData.friends && Array.isArray(userData.friends) && userData.friends.length > 0) {
+            setDebug(prev => [...prev, `Found ${userData.friends.length} friends in user data`]);
+            
+            // Process friends data
+            if (currentUser) {
+              const friendsWithFollowingStatus = userData.friends.map((friend: FriendUser) => {
+                if (friend.isFollowing !== undefined) return friend;
+                
+                const isFollowing = currentUser.following && Array.isArray(currentUser.following) ? 
+                  currentUser.following.some(followedId => String(followedId) === String(friend._id)) : 
+                  false;
+                
+                return { ...friend, isFollowing };
+              });
+              
+              setFriends(friendsWithFollowingStatus);
+            } else {
+              setFriends(userData.friends);
+            }
+            
+            setFriendsInitialized(true);
+            setLoadingFriends(false);
+            return;
+          }
+        }
+      } catch (e) {
+        setDebug(prev => [...prev, `Failed to get user profile with friends included`]);
+      }
+      
+      // APPROACH 3: For other users, try the mutual friends endpoint
+      if (currentUser && profile._id !== currentUser._id) {
+        try {
+          setDebug(prev => [...prev, `Trying to get mutual friends using /friends/mutual/${id}`]);
+          const response = await makeApiRequest(`/friends/mutual/${id}`);
+          
+          if (response?.data) {
+            const mutualFriends = Array.isArray(response.data) ? response.data : 
+                                (response.data.friends || []);
+            
+            if (mutualFriends.length >= 0) {
+              setDebug(prev => [...prev, `Found ${mutualFriends.length} mutual friends`]);
+              
+              // Process mutual friends data
+              if (currentUser) {
+                const friendsWithFollowingStatus = mutualFriends.map((friend: FriendUser) => {
+                  if (friend.isFollowing !== undefined) return friend;
+                  
+                  const isFollowing = currentUser.following && Array.isArray(currentUser.following) ? 
+                    currentUser.following.some(followedId => String(followedId) === String(friend._id)) : 
+                    false;
+                  
+                  return { ...friend, isFollowing };
+                });
+                
+                setFriends(friendsWithFollowingStatus);
+              } else {
+                setFriends(mutualFriends);
+              }
+              
+              setFriendsInitialized(true);
+              setLoadingFriends(false);
+              return;
+            }
+          }
+        } catch (e) {
+          setDebug(prev => [...prev, `Failed to get mutual friends`]);
+        }
+      }
+      
+      // If we couldn't get friends data, set empty array
+      setDebug(prev => [...prev, 'No friends data found from any endpoint']);
+      setFriends([]);
+      setFriendsInitialized(true);
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      console.error('Error fetching friends:', err);
+      setFriendsError(err.response?.data?.message || err.message || 'Failed to load friends.');
+      setDebug(prev => [...prev, `Error fetching friends: ${err.message}`]);
+      
+      // Still mark as initialized to prevent constant retries
+      setFriends([]);
+      setFriendsInitialized(true);
+    } finally {
+      setLoadingFriends(false);
+    }
+  }, [id, profile, makeApiRequest, currentUser, friendsInitialized, friends.length]);
+
+  // Handle following a friend
+  const handleFollowFriend = async (friendId: string) => {
+    if (!isAuthenticated || !currentUser) return;
+    
+    try {
+      await makeApiRequest(`/users/${friendId}/follow`, 'post');
+      setDebug(prev => [...prev, `Successfully followed user ${friendId}`]);
+      
+      // Update the friends list to show the new following status
+      setFriends(prevFriends => 
+        prevFriends.map(friend => 
+          friend._id === friendId 
+            ? { ...friend, isFollowing: true } 
+            : friend
+        )
+      );
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      console.error('Error following friend:', err);
+      setDebug(prev => [...prev, `Error following friend ${friendId}: ${err.message}`]);
+    }
+  };
+  
+  // Handle unfollowing a friend
+  const handleUnfollowFriend = async (friendId: string) => {
+    if (!isAuthenticated || !currentUser) return;
+    
+    try {
+      await makeApiRequest(`/users/${friendId}/unfollow`, 'post');
+      setDebug(prev => [...prev, `Successfully unfollowed user ${friendId}`]);
+      
+      // Update the friends list to show the new following status
+      setFriends(prevFriends => 
+        prevFriends.map(friend => 
+          friend._id === friendId 
+            ? { ...friend, isFollowing: false } 
+            : friend
+        )
+      );
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      console.error('Error unfollowing friend:', err);
+      setDebug(prev => [...prev, `Error unfollowing friend ${friendId}: ${err.message}`]);
+    }
+  };
+
+  // Handle bio save
+  const handleSaveBio = async () => {
+    if (!currentUser || !profile) return;
+    
+    setSavingBio(true);
+    setBioError(null);
+    
+    try {
+      // Using the correct endpoint for updating user profile
+      await makeApiRequest('/users/profile', 'put', { bio: bioValue });
+      setDebug(prev => [...prev, `Bio updated successfully to: ${bioValue}`]);
+      
+      // Update the local profile state with new bio
+      setProfile(prevProfile => {
+        if (!prevProfile) return null;
+        return { ...prevProfile, bio: bioValue };
+      });
+      
+      // Exit edit mode
+      setIsEditingBio(false);
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      console.error('Error updating bio:', err);
+      setBioError(err.response?.data?.message || err.message || 'Failed to update bio.');
+      setDebug(prev => [...prev, `Error updating bio: ${err.response?.data?.message || err.message || 'Failed to update bio.'}`]);
+    } finally {
+      setSavingBio(false);
+    }
+  };
+
+  // Handle cancel bio edit
+  const handleCancelEditBio = () => {
+    setIsEditingBio(false);
+    setBioValue(profile?.bio || '');
+    setBioError(null);
+  };
+  
+  // Handle save basic info
+  const handleSaveBasicInfo = async () => {
+    if (!currentUser || !profile) return;
+    
+    setSavingBasicInfo(true);
+    setBasicInfoError(null);
+    
+    try {
+      await makeApiRequest('/users/profile', 'put', basicInfoValues);
+      setDebug(prev => [...prev, `Basic info updated successfully: ${JSON.stringify(basicInfoValues)}`]);
+      
+      // Update the local profile state with new values
+      setProfile(prevProfile => {
+        if (!prevProfile) return null;
+        return { ...prevProfile, ...basicInfoValues };
+      });
+      
+      // Exit edit mode
+      setIsEditingBasicInfo(false);
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      console.error('Error updating basic info:', err);
+      setBasicInfoError(err.response?.data?.message || err.message || 'Failed to update information.');
+      setDebug(prev => [...prev, `Error updating basic info: ${err.response?.data?.message || err.message || 'Failed to update information.'}`]);
+    } finally {
+      setSavingBasicInfo(false);
+    }
+  };
+  
+  // Handle cancel basic info edit
+  const handleCancelEditBasicInfo = () => {
+    setIsEditingBasicInfo(false);
+    // Reset to profile values
+    if (profile) {
+      setBasicInfoValues({
+        firstName: profile.firstName || '',
+        lastName: profile.lastName || '',
+        location: profile.location || ''
+      });
+    }
+    setBasicInfoError(null);
+  };
+  
+  // Handle save work and education
+  const handleSaveWorkEdu = async () => {
+    if (!currentUser || !profile) return;
+    
+    setSavingWorkEdu(true);
+    setWorkEduError(null);
+    
+    try {
+      await makeApiRequest('/users/profile', 'put', workEduValues);
+      setDebug(prev => [...prev, `Work and education updated successfully: ${JSON.stringify(workEduValues)}`]);
+      
+      // Update the local profile state with new values
+      setProfile(prevProfile => {
+        if (!prevProfile) return null;
+        return { ...prevProfile, ...workEduValues };
+      });
+      
+      // Exit edit mode
+      setIsEditingWorkEdu(false);
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      console.error('Error updating work and education:', err);
+      setWorkEduError(err.response?.data?.message || err.message || 'Failed to update work and education.');
+      setDebug(prev => [...prev, `Error updating work and education: ${err.response?.data?.message || err.message || 'Failed to update work and education.'}`]);
+    } finally {
+      setSavingWorkEdu(false);
+    }
+  };
+  
+  // Handle cancel work and education edit
+  const handleCancelEditWorkEdu = () => {
+    setIsEditingWorkEdu(false);
+    // Reset to profile values
+    if (profile) {
+      setWorkEduValues({
+        work: profile.work || '',
+        education: profile.education || ''
+      });
+    }
+    setWorkEduError(null);
+  };
+
+  // Process friends data when tab changes
+  useEffect(() => {
+    if (tabValue === 2 && !friendsInitialized && !loadingFriends) {
+      fetchFriends();
+    }
+  }, [tabValue, fetchFriends, loadingFriends, friendsInitialized]);
+
   useEffect(() => {
     // Handle invalid ID logic
     if (router.isReady && (!id || id === 'undefined')) {
@@ -126,6 +507,7 @@ const ProfilePage: React.FC = () => {
       setProfile(null);
       setPosts([]);
       setIsFollowing(false);
+      setFriendsInitialized(false); // Reset friends initialization status when loading a new profile
       setDebug(prev => [...prev, `Starting profile fetch for ID/Username: ${id}`]);
 
       try {
@@ -136,32 +518,76 @@ const ProfilePage: React.FC = () => {
 
         setDebug(prev => [...prev, `Using relative profile endpoint: ${profileEndpoint}`]);
         const profileResponse = await makeApiRequest(profileEndpoint);
-
+        
         if (profileResponse?.data) {
-            const profileData: Profile = profileResponse.data.profile || profileResponse.data;
-            setDebug(prev => [...prev, `Profile data received: Keys - ${Object.keys(profileData).join(', ')}`]);
-            setProfile(profileData);
-
-            if (currentUser && profileData.followers && Array.isArray(profileData.followers)) {
-                const isCurrentlyFollowing = profileData.followers.some(followerId => String(followerId) === currentUser._id);
-                setIsFollowing(isCurrentlyFollowing);
-                setDebug(prev => [...prev, `Set following status from followers array: ${isCurrentlyFollowing}`]);
-            }
-            else if (profileData.relationshipStatus?.isFollowing !== undefined) {
-                 setIsFollowing(profileData.relationshipStatus.isFollowing);
-                 setDebug(prev => [...prev, `Set following status from relationshipStatus: ${profileData.relationshipStatus?.isFollowing}`]);
-            }
-
-            if (profileData.recentPosts && Array.isArray(profileData.recentPosts)) {
-                setDebug(prev => [...prev, `Using recentPosts from profile response: ${profileData.recentPosts?.length} posts found`]);
-                setPosts(profileData.recentPosts);
-            } else if (!profileData.privacyRestricted) {
-                await fetchUserPosts();
-            }
-        } else {
-             throw new Error('Profile data not found in API response.');
+        const profileData: Profile = profileResponse.data.profile || profileResponse.data;
+        setDebug(prev => [...prev, `Profile data received: Keys - ${Object.keys(profileData).join(', ')}`]);
+        
+        // Process friends data from profile response BEFORE setting the profile
+        // Use hasOwnProperty to avoid TypeScript errors
+        const hasFriends = Object.prototype.hasOwnProperty.call(profileData, 'friends') && 
+                          profileData.friends !== null && 
+                          Array.isArray(profileData.friends) && 
+                          profileData.friends.length > 0;
+        
+        if (hasFriends) {
+          const friendsList = profileData.friends as FriendUser[];
+          setDebug(prev => [...prev, `Processing ${friendsList.length} friends from profile data`]);
+          
+          if (currentUser) {
+            const friendsWithFollowingStatus = friendsList.map(friend => {
+              if (friend.isFollowing !== undefined) return friend;
+              
+              // Check if this friend is in the current user's following list
+              const isFollowing = currentUser.following && Array.isArray(currentUser.following) ? 
+                currentUser.following.some(followedId => String(followedId) === String(friend._id)) : 
+                false;
+              
+              return { ...friend, isFollowing };
+            });
+            
+            setFriends(friendsWithFollowingStatus);
+          } else {
+            setFriends(friendsList);
+          }
+          
+          setFriendsInitialized(true); // Mark friends as initialized
         }
+          
+          // Now set the profile data
+          setProfile(profileData);
+          
+          // Initialize form values
+          setBioValue(profileData.bio || '');
+          setBasicInfoValues({
+            firstName: profileData.firstName || '',
+            lastName: profileData.lastName || '',
+            location: profileData.location || ''
+          });
+          setWorkEduValues({
+            work: profileData.work || '',
+            education: profileData.education || ''
+          });
 
+          if (currentUser && profileData.followers && Array.isArray(profileData.followers)) {
+            const isCurrentlyFollowing = profileData.followers.some(followerId => String(followerId) === currentUser._id);
+            setIsFollowing(isCurrentlyFollowing);
+            setDebug(prev => [...prev, `Set following status from followers array: ${isCurrentlyFollowing}`]);
+          }
+          else if (profileData.relationshipStatus?.isFollowing !== undefined) {
+            setIsFollowing(profileData.relationshipStatus.isFollowing);
+            setDebug(prev => [...prev, `Set following status from relationshipStatus: ${profileData.relationshipStatus?.isFollowing}`]);
+          }
+
+          if (profileData.recentPosts && Array.isArray(profileData.recentPosts)) {
+            setDebug(prev => [...prev, `Using recentPosts from profile response: ${profileData.recentPosts?.length} posts found`]);
+            setPosts(profileData.recentPosts);
+          } else if (!profileData.privacyRestricted) {
+            await fetchUserPosts();
+          }
+        } else {
+          throw new Error('Profile data not found in API response.');
+        }
       } catch (error: unknown) {
         const err = error as ApiError;
         console.error('Error fetching profile:', err);
@@ -174,19 +600,19 @@ const ProfilePage: React.FC = () => {
     };
 
     const fetchUserPosts = async () => {
-        if (typeof id !== 'string') return;
-        try {
-            const postsEndpoint = `/posts/user/${id}`;
-            setDebug(prev => [...prev, `Fetching posts separately from relative endpoint: ${postsEndpoint}`]);
-            const postsResponse = await makeApiRequest(postsEndpoint);
-            const postsData = postsResponse?.data?.posts || (Array.isArray(postsResponse?.data) ? postsResponse.data : []);
-            setDebug(prev => [...prev, `Found ${postsData.length} posts separately.`]);
-            setPosts(postsData);
-        } catch (error: unknown) {
-            const err = error as ApiError;
-            setDebug(prev => [...prev, `Error fetching posts separately: ${err.message}`]);
-            setPosts([]);
-        }
+      if (typeof id !== 'string') return;
+      try {
+        const postsEndpoint = `/posts/user/${id}`;
+        setDebug(prev => [...prev, `Fetching posts separately from relative endpoint: ${postsEndpoint}`]);
+        const postsResponse = await makeApiRequest(postsEndpoint);
+        const postsData = postsResponse?.data?.posts || (Array.isArray(postsResponse?.data) ? postsResponse.data : []);
+        setDebug(prev => [...prev, `Found ${postsData.length} posts separately.`]);
+        setPosts(postsData);
+      } catch (error: unknown) {
+        const err = error as ApiError;
+        setDebug(prev => [...prev, `Error fetching posts separately: ${err.message}`]);
+        setPosts([]);
+      }
     };
 
     fetchProfileAndPosts();
@@ -236,8 +662,6 @@ const ProfilePage: React.FC = () => {
   if (!profile) {
     return <Container sx={{ py: 8 }}><Typography variant="h6" align="center">Profile could not be loaded.</Typography></Container>;
   }
-
-  const isOwnProfile = currentUser && currentUser._id === profile._id;
 
   if (profile.privacyRestricted && !isOwnProfile) {
      return (
@@ -307,6 +731,7 @@ const ProfilePage: React.FC = () => {
         </Tabs>
       </Paper>
 
+      {/* Posts Tab */}
       <Box sx={{ display: tabValue === 0 ? 'block' : 'none' }}>
         {posts.length > 0 ? (
           <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
@@ -325,9 +750,527 @@ const ProfilePage: React.FC = () => {
           <Paper sx={{ p: 4, borderRadius: 2, textAlign: 'center' }}> <Typography variant="body1" color="text.secondary">No posts to display.</Typography> </Paper>
         )}
       </Box>
-      <Box sx={{ display: tabValue === 1 ? 'block' : 'none' }}> {/* About Tab */} </Box>
-      <Box sx={{ display: tabValue === 2 ? 'block' : 'none' }}> {/* Friends Tab */} </Box>
-      <Box sx={{ display: tabValue === 3 ? 'block' : 'none' }}> {/* Photos Tab */} </Box>
+
+      {/* About Tab */}
+      <Box sx={{ display: tabValue === 1 ? 'block' : 'none' }}>
+        <Paper sx={{ p: 4, borderRadius: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
+            {/* Left sidebar for navigation within About section */}
+            <Box sx={{ width: { xs: '100%', md: '30%' } }}>
+              <Typography variant="h6" gutterBottom sx={{ borderBottom: 1, borderColor: 'divider', pb: 1 }}>
+                About
+              </Typography>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+                <Button 
+                  variant="text" 
+                  sx={{ 
+                    justifyContent: 'flex-start',
+                    px: 2,
+                    py: 1,
+                    borderRadius: 1,
+                    '&:hover': { bgcolor: 'action.hover' },
+                    bgcolor: 'action.selected'
+                  }}
+                >
+                  Overview
+                </Button>
+                <Button 
+                  variant="text" 
+                  sx={{ 
+                    justifyContent: 'flex-start',
+                    px: 2,
+                    py: 1,
+                    borderRadius: 1,
+                    '&:hover': { bgcolor: 'action.hover' }
+                  }}
+                >
+                  Work and Education
+                </Button>
+                <Button 
+                  variant="text" 
+                  sx={{ 
+                    justifyContent: 'flex-start',
+                    px: 2,
+                    py: 1,
+                    borderRadius: 1,
+                    '&:hover': { bgcolor: 'action.hover' }
+                  }}
+                >
+                  Contact and Basic Info
+                </Button>
+                <Button 
+                  variant="text" 
+                  sx={{ 
+                    justifyContent: 'flex-start',
+                    px: 2,
+                    py: 1,
+                    borderRadius: 1,
+                    '&:hover': { bgcolor: 'action.hover' }
+                  }}
+                >
+                  Details About {profile.firstName}
+                </Button>
+              </Box>
+            </Box>
+            
+            {/* Right content area */}
+            <Box sx={{ width: { xs: '100%', md: '70%' } }}>
+              <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6">Bio</Typography>
+                  {isOwnProfile && !isEditingBio && (
+                    <Button 
+                      variant="outlined" 
+                      size="small" 
+                      startIcon={<EditIcon />}
+                      onClick={() => setIsEditingBio(true)}
+                    >
+                      Edit
+                    </Button>
+                  )}
+                </Box>
+                
+                {isEditingBio ? (
+                  <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveBio(); }}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={4}
+                      value={bioValue}
+                      onChange={(e) => setBioValue(e.target.value)}
+                      placeholder="Tell people about yourself..."
+                      variant="outlined"
+                      error={!!bioError}
+                      helperText={bioError}
+                      sx={{ mb: 2 }}
+                    />
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                      <Button 
+                        variant="text" 
+                        onClick={handleCancelEditBio}
+                        disabled={savingBio}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        variant="contained" 
+                        type="submit"
+                        disabled={savingBio}
+                        startIcon={savingBio ? <CircularProgress size={16} /> : null}
+                      >
+                        Save
+                      </Button>
+                    </Box>
+                  </Box>
+                ) : (
+                  <>
+                    {profile.bio ? (
+                      <Typography variant="body1">{profile.bio}</Typography>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                        {isOwnProfile ? 'Add a bio to tell people more about yourself' : 'No bio available'}
+                      </Typography>
+                    )}
+                  </>
+                )}
+              </Paper>
+              
+              <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6">Basic Information</Typography>
+                  {isOwnProfile && !isEditingBasicInfo && (
+                    <Button 
+                      variant="outlined" 
+                      size="small" 
+                      startIcon={<EditIcon />}
+                      onClick={() => setIsEditingBasicInfo(true)}
+                    >
+                      Edit
+                    </Button>
+                  )}
+                </Box>
+                
+                {isEditingBasicInfo ? (
+                  <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveBasicInfo(); }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 2 }}>
+                      <TextField
+                        label="First Name"
+                        value={basicInfoValues.firstName}
+                        onChange={(e) => setBasicInfoValues(prev => ({ ...prev, firstName: e.target.value }))}
+                        fullWidth
+                        variant="outlined"
+                        required
+                      />
+                      <TextField
+                        label="Last Name"
+                        value={basicInfoValues.lastName}
+                        onChange={(e) => setBasicInfoValues(prev => ({ ...prev, lastName: e.target.value }))}
+                        fullWidth
+                        variant="outlined"
+                        required
+                      />
+                    </Box>
+                    
+                    <TextField
+                      label="Location"
+                      value={basicInfoValues.location}
+                      onChange={(e) => setBasicInfoValues(prev => ({ ...prev, location: e.target.value }))}
+                      fullWidth
+                      variant="outlined"
+                      placeholder="Where do you live?"
+                      sx={{ mb: 2 }}
+                    />
+                    
+                    {/* Username (display only) */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <Typography variant="subtitle2" sx={{ mr: 1 }}>Username:</Typography>
+                      <Typography variant="body1">@{profile.username}</Typography>
+                      <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>(cannot be changed)</Typography>
+                    </Box>
+                    
+                    {basicInfoError && (
+                      <Alert severity="error" sx={{ mb: 2 }}>
+                        {basicInfoError}
+                      </Alert>
+                    )}
+                    
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                      <Button 
+                        variant="text" 
+                        onClick={handleCancelEditBasicInfo}
+                        disabled={savingBasicInfo}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        variant="contained" 
+                        type="submit"
+                        disabled={savingBasicInfo}
+                        startIcon={savingBasicInfo ? <CircularProgress size={16} /> : null}
+                      >
+                        Save
+                      </Button>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'auto 1fr' }, gap: '12px', alignItems: 'start' }}>
+                    <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
+                      Name:
+                    </Typography>
+                    <Typography variant="body1">
+                      {profile.firstName} {profile.lastName}
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
+                      Username:
+                    </Typography>
+                    <Typography variant="body1">
+                      @{profile.username}
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
+                      Location:
+                    </Typography>
+                    <Typography variant="body1">
+                      {profile.location || (isOwnProfile ? 'Add your location' : 'No location provided')}
+                    </Typography>
+                    
+                    {profile.birthday && (
+                      <>
+                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
+                          Birthday:
+                        </Typography>
+                        <Typography variant="body1">
+                          {new Date(profile.birthday).toLocaleDateString()}
+                        </Typography>
+                      </>
+                    )}
+                    
+                    {profile.joinedDate && (
+                      <>
+                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
+                          Joined:
+                        </Typography>
+                        <Typography variant="body1">
+                          {new Date(profile.createdAt || profile.joinedDate).toLocaleDateString()}
+                        </Typography>
+                      </>
+                    )}
+                  </Box>
+                )}
+              </Paper>
+              
+              {/* Work and Education Section */}
+              <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6">Work and Education</Typography>
+                  {isOwnProfile && !isEditingWorkEdu && (
+                    <Button 
+                      variant="outlined" 
+                      size="small" 
+                      startIcon={<EditIcon />}
+                      onClick={() => setIsEditingWorkEdu(true)}
+                    >
+                      {!profile.work && !profile.education ? 'Add' : 'Edit'}
+                    </Button>
+                  )}
+                </Box>
+                
+                {isEditingWorkEdu ? (
+                  <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveWorkEdu(); }}>
+                    <TextField
+                      label="Work"
+                      value={workEduValues.work}
+                      onChange={(e) => setWorkEduValues(prev => ({ ...prev, work: e.target.value }))}
+                      fullWidth
+                      variant="outlined"
+                      placeholder="Where do you work?"
+                      sx={{ mb: 2 }}
+                    />
+                    
+                    <TextField
+                      label="Education"
+                      value={workEduValues.education}
+                      onChange={(e) => setWorkEduValues(prev => ({ ...prev, education: e.target.value }))}
+                      fullWidth
+                      variant="outlined"
+                      placeholder="Where did you study?"
+                      sx={{ mb: 2 }}
+                    />
+                    
+                    {workEduError && (
+                      <Alert severity="error" sx={{ mb: 2 }}>
+                        {workEduError}
+                      </Alert>
+                    )}
+                    
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                      <Button 
+                        variant="text" 
+                        onClick={handleCancelEditWorkEdu}
+                        disabled={savingWorkEdu}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        variant="contained" 
+                        type="submit"
+                        disabled={savingWorkEdu}
+                        startIcon={savingWorkEdu ? <CircularProgress size={16} /> : null}
+                      >
+                        Save
+                      </Button>
+                    </Box>
+                  </Box>
+                ) : (
+                  !profile.education && !profile.work ? (
+                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                      {isOwnProfile ? 'Add your work and education information' : 'No work or education information available'}
+                    </Typography>
+                  ) : (
+                    <>
+                      {profile.work && (
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                            Work
+                          </Typography>
+                          <Typography variant="body1">
+                            {profile.work}
+                          </Typography>
+                        </Box>
+                      )}
+                      
+                      {profile.education && (
+                        <Box>
+                          <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
+                            Education
+                          </Typography>
+                          <Typography variant="body1">
+                            {profile.education}
+                          </Typography>
+                        </Box>
+                      )}
+                    </>
+                  )
+                )}
+              </Paper>
+              
+              {/* Contact Information */}
+              <Paper variant="outlined" sx={{ p: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6">Contact Information</Typography>
+                  {isOwnProfile && (
+                    <Button variant="outlined" size="small" startIcon={<EditIcon />}>
+                      Edit
+                    </Button>
+                  )}
+                </Box>
+                
+                {!profile.email && !profile.website && !profile.phone ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    {isOwnProfile ? 'Add your contact information' : 'No contact information available'}
+                  </Typography>
+                ) : (
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'auto 1fr' }, gap: '12px', alignItems: 'start' }}>
+                    {profile.email && (
+                      <>
+                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
+                          Email:
+                        </Typography>
+                        <Typography variant="body1">
+                          {profile.email}
+                        </Typography>
+                      </>
+                    )}
+                    
+                    {profile.phone && (
+                      <>
+                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
+                          Phone:
+                        </Typography>
+                        <Typography variant="body1">
+                          {profile.phone}
+                        </Typography>
+                      </>
+                    )}
+                    
+                    {profile.website && (
+                      <>
+                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
+                          Website:
+                        </Typography>
+                        <Typography variant="body1" component="a" href={profile.website} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+                          {profile.website}
+                        </Typography>
+                      </>
+                    )}
+                  </Box>
+                )}
+              </Paper>
+            </Box>
+          </Box>
+        </Paper>
+      </Box>
+
+      {/* Friends Tab */}
+      <Box sx={{ display: tabValue === 2 ? 'block' : 'none' }}>
+        <Paper sx={{ p: 4, borderRadius: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h5">Friends</Typography>
+            {isOwnProfile && (
+              <Button variant="outlined" startIcon={<PersonAddIcon />} onClick={() => router.push('/friends/find')}>
+                Find Friends
+              </Button>
+            )}
+          </Box>
+          
+          {friendsError && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {friendsError}
+            </Alert>
+          )}
+          
+          {loadingFriends ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : friendsInitialized && friends.length > 0 ? (
+            <Grid container spacing={2}>
+              {friends.map((friend) => (
+                <Grid size={{xs:12,sm:6,md:4,lg:3}} key={friend._id}>
+                  <Paper 
+                    variant="outlined" 
+                    sx={{ 
+                      p: 2, 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center',
+                      height: '100%', 
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: 3
+                      }
+                    }}
+                  >
+                    <Avatar 
+                      src={getFullImageUrl(friend.profilePicture, 'profile')} 
+                      alt={friend.username}
+                      sx={{ width: 80, height: 80, mb: 1 }}
+                      onClick={() => router.push(`/profile/${friend._id}`)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <Typography 
+                      variant="subtitle1" 
+                      sx={{ 
+                        fontWeight: 'bold', 
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        '&:hover': { textDecoration: 'underline' }
+                      }}
+                      onClick={() => router.push(`/profile/${friend._id}`)}
+                    >
+                      {friend.firstName} {friend.lastName}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: 'center' }}>
+                      @{friend.username}
+                    </Typography>
+                    
+                    {isAuthenticated && currentUser?._id !== friend._id && (
+                      <Button 
+                        variant={friend.isFollowing ? "outlined" : "contained"} 
+                        size="small" 
+                        startIcon={<PersonAddIcon />}
+                        fullWidth
+                        onClick={() => friend.isFollowing ? handleUnfollowFriend(friend._id) : handleFollowFriend(friend._id)}
+                      >
+                        {friend.isFollowing ? 'Unfollow' : 'Follow'}
+                      </Button>
+                    )}
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          ) : friendsInitialized ? (
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              py: 6, 
+              textAlign: 'center',
+              bgcolor: 'background.default',
+              borderRadius: 1
+            }}>
+              <PersonIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+              <Typography variant="h6" color="text.secondary">
+                {isOwnProfile ? 'You have no friends yet' : `${profile.firstName} has no friends yet`}
+              </Typography>
+              {isOwnProfile && (
+                <Button 
+                  variant="contained" 
+                  startIcon={<PersonAddIcon />} 
+                  sx={{ mt: 2 }}
+                  onClick={() => router.push('/friends/find')}
+                >
+                  Find Friends
+                </Button>
+              )}
+            </Box>
+          ) : (
+            // Add this fallback to cover the gap between initializing and loading
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          )}
+        </Paper>
+      </Box>
+
+      {/* Photos Tab */}
+      <Box sx={{ display: tabValue === 3 ? 'block' : 'none' }}>
+        {/* Photos tab content will go here */}
+      </Box>
 
       {process.env.NODE_ENV !== 'production' && ( <Paper sx={{ p: 2, mt: 3, maxHeight: 200, overflow: 'auto', fontSize: '0.7rem' }}> <Typography variant="subtitle2">Debug Info:</Typography> {debug.map((msg, i) => (<Typography key={i} variant="caption" display="block">{msg}</Typography>))} </Paper> )}
     </Container>
