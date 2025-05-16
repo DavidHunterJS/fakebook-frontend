@@ -34,6 +34,7 @@ import { Post } from '../../types/post'; // Adjust path if needed
 import PostCard from '../../components/post/PostCard'; // Adjust path if needed
 import {getFullImageUrl}  from '../../utils/imgUrl'; // Adjust the path as needed
 
+
 // Define a type for API errors
 interface ApiError {
   response?: {
@@ -97,6 +98,15 @@ interface Photo {
   albumId?: string;
   likes?: number;
   comments?: number;
+}
+
+interface AlbumPhoto {
+  _id?: string;
+  filename: string;
+  caption?: string;
+  createdAt?: string;
+  likes?: Array<string> | number;
+  comments?: Array<string> | number;
 }
 
 const ProfilePage: React.FC = () => {
@@ -244,6 +254,7 @@ const ProfilePage: React.FC = () => {
           }
         } catch (e) {
           setDebug(prev => [...prev, `Failed to get friends from /friends endpoint, trying alternative`]);
+          console.log(e);
         }
       }
       
@@ -281,6 +292,7 @@ const ProfilePage: React.FC = () => {
         }
       } catch (e) {
         setDebug(prev => [...prev, `Failed to get user profile with friends included`]);
+        console.log(e);
       }
       
       // APPROACH 3: For other users, try the mutual friends endpoint
@@ -320,6 +332,7 @@ const ProfilePage: React.FC = () => {
           }
         } catch (e) {
           setDebug(prev => [...prev, `Failed to get mutual friends`]);
+          console.log(e);
         }
       }
       
@@ -399,7 +412,7 @@ const ProfilePage: React.FC = () => {
       }
       
       // Try to fetch user's albums if available
-      let photosFromAlbums: Photo[] = [];
+      const photosFromAlbums: Photo[] = [];
       try {
         const albumsResponse = await makeApiRequest(`/users/${id}/albums`);
         if (albumsResponse?.data?.albums && Array.isArray(albumsResponse.data.albums)) {
@@ -409,7 +422,7 @@ const ProfilePage: React.FC = () => {
           for (const album of albums) {
             if (album.photos && Array.isArray(album.photos) && album.photos.length > 0) {
               // Add each photo from the album
-              album.photos.forEach((photo: any) => {
+              album.photos.forEach((photo: AlbumPhoto) => {
                 photosFromAlbums.push({
                   _id: photo._id || `album-${album._id}-${photo.filename}`,
                   url: getFullImageUrl(photo.filename, 'post'),
@@ -417,8 +430,8 @@ const ProfilePage: React.FC = () => {
                   caption: photo.caption || album.title || '',
                   createdAt: (photo.createdAt || album.createdAt || new Date().toISOString()) as string,
                   albumId: album._id,
-                  likes: photo.likes?.length || 0,
-                  comments: photo.comments?.length || 0
+                  likes: typeof photo.likes === 'number' ? photo.likes : photo.likes?.length || 0,
+                  comments: typeof photo.comments === 'number' ? photo.comments : photo.comments?.length || 0
                 });
               });
             }
