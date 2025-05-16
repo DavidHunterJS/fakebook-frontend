@@ -5,6 +5,7 @@ import ImageList from '@mui/material/ImageList';
 import ImageListItem from '@mui/material/ImageListItem';
 import ImageListItemBar from '@mui/material/ImageListItemBar';
 import { useMediaQuery, useTheme } from '@mui/material';
+import { useGetUserPosts } from '../../hooks/usePosts'; // Ensure this path is correct
 import {
   Container,
   Box,
@@ -17,13 +18,13 @@ import {
   CircularProgress,
   Alert,
   TextField,
-  Grid, // Added for the friends grid
+  Grid,
 } from '@mui/material';
 import {
   PersonAdd as PersonAddIcon,
   Edit as EditIcon,
-  Person as PersonIcon, // Added for empty friends display
-  Image as ImageIcon, 
+  Person as PersonIcon,
+  Image as ImageIcon,
   Favorite as LikeIcon,
   Comment as CommentIcon
 } from '@mui/icons-material';
@@ -33,7 +34,6 @@ import { User } from '../../types/user'; // Adjust path if needed
 import { Post } from '../../types/post'; // Adjust path if needed
 import PostCard from '../../components/post/PostCard'; // Adjust path if needed
 import {getFullImageUrl}  from '../../utils/imgUrl'; // Adjust the path as needed
-
 
 // Define a type for API errors
 interface ApiError {
@@ -110,42 +110,52 @@ interface AlbumPhoto {
 }
 
 const ProfilePage: React.FC = () => {
+  // Hooks must be called inside the component and at the top level
   const router = useRouter();
-  const { id } = router.query;
+  const { id } = router.query; // 'id' is now correctly scoped
   const { user: currentUser, isAuthenticated } = useAuth();
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const isMediumScreen = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
+  // React Query hook to fetch user posts (for the "Posts" tab)
+  const {
+    data: userPostsData = [], // Renamed to avoid conflict
+    isLoading: userPostsLoading, // Renamed to avoid conflict
+  } = useGetUserPosts(typeof id === 'string' ? id : undefined);
+
+
   // State variables - grouped by functionality
   // Profile and loading states
   const [isOwnProfile, setIsOwnProfile] = useState<boolean | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  // This 'posts' state is managed by fetchProfileAndPosts/fetchUserPosts
+  // It might be for 'recentPosts' or a different set of posts than userPostsData
   const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // General page loading
   const [error, setError] = useState<string | null>(null);
   const [tabValue, setTabValue] = useState(0);
   const [isFollowing, setIsFollowing] = useState(false);
   const [debug, setDebug] = useState<string[]>([]);
-  
+
   // Friends data
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [friendsError, setFriendsError] = useState<string | null>(null);
   const [friendsInitialized, setFriendsInitialized] = useState(false);
-  
+
   // Photos data
-  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [photosData, setPhotosData] = useState<Photo[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [photosError, setPhotosError] = useState<string | null>(null);
   const [photosInitialized, setPhotosInitialized] = useState(false);
-  
+
   // Bio editing state
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [bioValue, setBioValue] = useState('');
   const [savingBio, setSavingBio] = useState(false);
   const [bioError, setBioError] = useState<string | null>(null);
-  
+
   // Basic info editing state
   const [isEditingBasicInfo, setIsEditingBasicInfo] = useState(false);
   const [basicInfoValues, setBasicInfoValues] = useState({
@@ -155,7 +165,7 @@ const ProfilePage: React.FC = () => {
   });
   const [savingBasicInfo, setSavingBasicInfo] = useState(false);
   const [basicInfoError, setBasicInfoError] = useState<string | null>(null);
-  
+
   // Work and Education editing state
   const [isEditingWorkEdu, setIsEditingWorkEdu] = useState(false);
   const [workEduValues, setWorkEduValues] = useState({
@@ -191,152 +201,115 @@ const ProfilePage: React.FC = () => {
         }
         throw error;
     }
-  }, []);
+  }, []); // setDebug is stable, so often omitted. Add if linting requires.
 
   // Fetch friends function
   const fetchFriends = useCallback(async () => {
     if (!profile || typeof id !== 'string') return;
-    
-    // Check if we already have processed friends data
+
     if (friendsInitialized && friends.length > 0) {
       setDebug(prev => [...prev, `Friends already initialized (${friends.length} friends), skipping fetch`]);
       return;
     }
-    
-    // Check if the profile has embedded friends data first
+
     const profileFriends = profile.friends;
     if (profileFriends && Array.isArray(profileFriends) && profileFriends.length > 0) {
       setDebug(prev => [...prev, `Using ${profileFriends.length} friends already loaded in profile data`]);
-      
-      // Process the existing friends data
       const friendsList = profileFriends as FriendUser[];
-      
       if (currentUser) {
         const friendsWithFollowingStatus = friendsList.map(friend => {
           if (friend.isFollowing !== undefined) return friend;
-          
-          // Check if this friend is in the current user's following list
-          const isFollowing = currentUser.following && Array.isArray(currentUser.following) ? 
-            currentUser.following.some(followedId => String(followedId) === String(friend._id)) : 
+          const isFollowing = currentUser.following && Array.isArray(currentUser.following) ?
+            currentUser.following.some(followedId => String(followedId) === String(friend._id)) :
             false;
-          
           return { ...friend, isFollowing };
         });
-        
         setFriends(friendsWithFollowingStatus);
       } else {
         setFriends(friendsList);
       }
-      
-      setFriendsInitialized(true); // Mark as initialized
-      return; // Exit early since we already have the data
+      setFriendsInitialized(true);
+      return;
     }
-    
-    // Only now set loading, since we know we need to fetch
+
     setLoadingFriends(true);
     setFriendsError(null);
-    
     try {
-      // APPROACH 1: If viewing own profile, use the working friends endpoint from friends page
       if (currentUser && profile._id === currentUser._id) {
-        setDebug(prev => [...prev, `Fetching own friends from /friends endpoint`]);
-        
+        setDebug(prev => [...prev, `Workspaceing own friends from /friends endpoint`]);
         try {
           const response = await makeApiRequest('/friends');
           if (response?.data && response.data.friends) {
             const friendsData = response.data.friends;
             setDebug(prev => [...prev, `Found ${friendsData.length} friends via /friends endpoint`]);
-            
             setFriends(friendsData);
             setFriendsInitialized(true);
             setLoadingFriends(false);
             return;
           }
         } catch (e) {
-          setDebug(prev => [...prev, `Failed to get friends from /friends endpoint, trying alternative`]);
-          console.log(e);
+          setDebug(prev => [...prev, `Failed to get friends from /friends endpoint, trying alternative: ${(e as Error).message}`]);
         }
       }
-      
-      // APPROACH 2: Try /users/:id endpoint which might include friends
+
       try {
         setDebug(prev => [...prev, `Trying to get user profile with friends using /users/${id}`]);
         const response = await makeApiRequest(`/users/${id}`);
-        
         if (response?.data) {
           const userData = response.data;
           if (userData.friends && Array.isArray(userData.friends) && userData.friends.length > 0) {
             setDebug(prev => [...prev, `Found ${userData.friends.length} friends in user data`]);
-            
-            // Process friends data
             if (currentUser) {
               const friendsWithFollowingStatus = userData.friends.map((friend: FriendUser) => {
                 if (friend.isFollowing !== undefined) return friend;
-                
-                const isFollowing = currentUser.following && Array.isArray(currentUser.following) ? 
-                  currentUser.following.some(followedId => String(followedId) === String(friend._id)) : 
+                const isFollowing = currentUser.following && Array.isArray(currentUser.following) ?
+                  currentUser.following.some(followedId => String(followedId) === String(friend._id)) :
                   false;
-                
                 return { ...friend, isFollowing };
               });
-              
               setFriends(friendsWithFollowingStatus);
             } else {
               setFriends(userData.friends);
             }
-            
             setFriendsInitialized(true);
             setLoadingFriends(false);
             return;
           }
         }
       } catch (e) {
-        setDebug(prev => [...prev, `Failed to get user profile with friends included`]);
-        console.log(e);
+        setDebug(prev => [...prev, `Failed to get user profile with friends included: ${(e as Error).message}`]);
       }
-      
-      // APPROACH 3: For other users, try the mutual friends endpoint
+
       if (currentUser && profile._id !== currentUser._id) {
         try {
           setDebug(prev => [...prev, `Trying to get mutual friends using /friends/mutual/${id}`]);
           const response = await makeApiRequest(`/friends/mutual/${id}`);
-          
           if (response?.data) {
-            const mutualFriends = Array.isArray(response.data) ? response.data : 
-                                (response.data.friends || []);
-            
+            const mutualFriends = Array.isArray(response.data) ? response.data :
+                                  (response.data.friends || []);
             if (mutualFriends.length >= 0) {
               setDebug(prev => [...prev, `Found ${mutualFriends.length} mutual friends`]);
-              
-              // Process mutual friends data
               if (currentUser) {
                 const friendsWithFollowingStatus = mutualFriends.map((friend: FriendUser) => {
                   if (friend.isFollowing !== undefined) return friend;
-                  
-                  const isFollowing = currentUser.following && Array.isArray(currentUser.following) ? 
-                    currentUser.following.some(followedId => String(followedId) === String(friend._id)) : 
+                  const isFollowing = currentUser.following && Array.isArray(currentUser.following) ?
+                    currentUser.following.some(followedId => String(followedId) === String(friend._id)) :
                     false;
-                  
                   return { ...friend, isFollowing };
                 });
-                
                 setFriends(friendsWithFollowingStatus);
               } else {
                 setFriends(mutualFriends);
               }
-              
               setFriendsInitialized(true);
               setLoadingFriends(false);
               return;
             }
           }
         } catch (e) {
-          setDebug(prev => [...prev, `Failed to get mutual friends`]);
-          console.log(e);
+          setDebug(prev => [...prev, `Failed to get mutual friends: ${(e as Error).message}`]);
         }
       }
-      
-      // If we couldn't get friends data, set empty array
       setDebug(prev => [...prev, 'No friends data found from any endpoint']);
       setFriends([]);
       setFriendsInitialized(true);
@@ -345,8 +318,6 @@ const ProfilePage: React.FC = () => {
       console.error('Error fetching friends:', err);
       setFriendsError(err.response?.data?.message || err.message || 'Failed to load friends.');
       setDebug(prev => [...prev, `Error fetching friends: ${err.message}`]);
-      
-      // Still mark as initialized to prevent constant retries
       setFriends([]);
       setFriendsInitialized(true);
     } finally {
@@ -357,45 +328,41 @@ const ProfilePage: React.FC = () => {
   // Fetch photos function
   const fetchPhotos = useCallback(async () => {
     if (!profile || typeof id !== 'string') return;
-    
-    // Check if we already have processed photos data
-    if (photosInitialized && photos.length > 0) {
-      setDebug(prev => [...prev, `Photos already initialized (${photos.length} photos), skipping fetch`]);
+    if (photosInitialized && photosData.length > 0) {
+      setDebug(prev => [...prev, `Photos already initialized (${photosData.length} photos), skipping fetch`]);
       return;
     }
-    
-    // Set loading state
     setLoadingPhotos(true);
     setPhotosError(null);
-    
     try {
-      // Try to fetch photos from user's posts first
-      setDebug(prev => [...prev, `Fetching photos from user posts for ID: ${id}`]);
-      
-      // Attempt to fetch posts with media if we don't already have them
-      let postsWithMedia = posts;
-      if (!posts.length) {
+      setDebug(prev => [...prev, `Workspaceing photos from user posts for ID: ${id}`]);
+      let postsForMedia = posts; // Use the 'posts' state which might contain recentPosts
+      if (!postsForMedia.length) { // If 'posts' state is empty, try fetching all user posts
         try {
-          const postsResponse = await makeApiRequest(`/posts/user/${id}`);
-          if (postsResponse?.data?.posts || Array.isArray(postsResponse?.data)) {
-            postsWithMedia = postsResponse.data.posts || postsResponse.data;
+          // Use userPostsData from useGetUserPosts if available and populated
+          if(userPostsData && userPostsData.length > 0) {
+            postsForMedia = userPostsData;
+             setDebug(prev => [...prev, `Using ${userPostsData.length} posts from useGetUserPosts for media extraction`]);
+          } else {
+             // Fallback to manual fetch if useGetUserPosts hasn't loaded or is empty
+            const postsResponse = await makeApiRequest(`/posts/user/${id}`);
+            if (postsResponse?.data?.posts || Array.isArray(postsResponse?.data)) {
+                postsForMedia = postsResponse.data.posts || postsResponse.data;
+                 setDebug(prev => [...prev, `Workspaceed ${postsForMedia.length} posts manually for media extraction`]);
+            }
           }
         } catch (e) {
           setDebug(prev => [...prev, `Error fetching posts for photos: ${(e as Error).message}`]);
         }
       }
-      
-      // Extract media from posts
+
       const photosFromPosts: Photo[] = [];
-      
-      if (postsWithMedia.length > 0) {
-        // Process each post to extract media
-        postsWithMedia.forEach(post => {
+      if (postsForMedia.length > 0) {
+        postsForMedia.forEach(post => {
           if (post.media && Array.isArray(post.media) && post.media.length > 0) {
-            // Add each media item as a photo
             post.media.forEach((mediaFilename: string) => {
               photosFromPosts.push({
-                _id: `${post._id}-${mediaFilename}`, // Create a unique ID
+                _id: `${post._id}-${mediaFilename}`,
                 url: getFullImageUrl(mediaFilename, 'post'),
                 filename: mediaFilename,
                 caption: post.content?.substring(0, 100) || '',
@@ -407,25 +374,20 @@ const ProfilePage: React.FC = () => {
             });
           }
         });
-        
         setDebug(prev => [...prev, `Extracted ${photosFromPosts.length} photos from posts`]);
       }
-      
-      // Try to fetch user's albums if available
+
       const photosFromAlbums: Photo[] = [];
       try {
         const albumsResponse = await makeApiRequest(`/users/${id}/albums`);
         if (albumsResponse?.data?.albums && Array.isArray(albumsResponse.data.albums)) {
           const albums = albumsResponse.data.albums;
-          
-          // Process each album to extract photos
           for (const album of albums) {
             if (album.photos && Array.isArray(album.photos) && album.photos.length > 0) {
-              // Add each photo from the album
               album.photos.forEach((photo: AlbumPhoto) => {
                 photosFromAlbums.push({
                   _id: photo._id || `album-${album._id}-${photo.filename}`,
-                  url: getFullImageUrl(photo.filename, 'post'),
+                  url: getFullImageUrl(photo.filename, 'post'), // Assuming album photos are also 'post' type for URL
                   filename: photo.filename,
                   caption: photo.caption || album.title || '',
                   createdAt: (photo.createdAt || album.createdAt || new Date().toISOString()) as string,
@@ -436,17 +398,13 @@ const ProfilePage: React.FC = () => {
               });
             }
           }
-          
           setDebug(prev => [...prev, `Extracted ${photosFromAlbums.length} photos from albums`]);
         }
       } catch (e) {
-        // Albums endpoint might not exist, just log and continue
         setDebug(prev => [...prev, `Error fetching albums (might not be implemented): ${(e as Error).message}`]);
       }
-      
-      // Try to fetch profile and cover photos
+
       const profilePhotos: Photo[] = [];
-      
       if (profile.profilePicture && profile.profilePicture !== 'default-avatar.png') {
         profilePhotos.push({
           _id: `profile-${profile._id}`,
@@ -456,7 +414,6 @@ const ProfilePage: React.FC = () => {
           createdAt: (profile.updatedAt || profile.createdAt || new Date().toISOString()) as string,
         });
       }
-      
       if (profile.coverPhoto && profile.coverPhoto !== 'default-cover.png') {
         profilePhotos.push({
           _id: `cover-${profile._id}`,
@@ -466,25 +423,17 @@ const ProfilePage: React.FC = () => {
           createdAt: (profile.updatedAt || profile.createdAt || new Date().toISOString()) as string,
         });
       }
-      
       setDebug(prev => [...prev, `Added ${profilePhotos.length} profile/cover photos`]);
-      
-      // Combine all photos
+
       const allPhotos = [...profilePhotos, ...photosFromPosts, ...photosFromAlbums];
-      
-      // Sort photos by date (newest first)
-      allPhotos.sort((a, b) => {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      });
-      
+      allPhotos.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
       if (allPhotos.length === 0) {
         setDebug(prev => [...prev, 'No photos found for this user']);
       } else {
         setDebug(prev => [...prev, `Found a total of ${allPhotos.length} photos`]);
       }
-      
-      // Update state
-      setPhotos(allPhotos);
+      setPhotosData(allPhotos);
       setPhotosInitialized(true);
     } catch (error: unknown) {
       const err = error as ApiError;
@@ -494,28 +443,25 @@ const ProfilePage: React.FC = () => {
     } finally {
       setLoadingPhotos(false);
     }
-  }, [id, profile, posts, makeApiRequest, photosInitialized, photos.length]);
+  }, [id, profile, posts, userPostsData, makeApiRequest, photosInitialized, photosData.length]);
+
 
   // Get grid columns function
   const getGridCols = useCallback(() => {
-    if (isSmallScreen) return 2; // 2 columns on small screens
-    if (isMediumScreen) return 3; // 3 columns on medium screens
-    return 4; // 4 columns on large screens
+    if (isSmallScreen) return 2;
+    if (isMediumScreen) return 3;
+    return 4;
   }, [isSmallScreen, isMediumScreen]);
 
   // Photo click handler
   const handlePhotoClick = useCallback((photo: Photo) => {
-    // If photo is from a post, navigate to the post
     if (photo.postId) {
       router.push(`/post/${photo.postId}`);
-    } 
-    // If photo is from an album, navigate to the album
+    }
     else if (photo.albumId) {
       router.push(`/album/${photo.albumId}`);
     }
-    // Otherwise, maybe open a modal to view the photo
     else {
-      // You could implement a modal here
       window.open(photo.url, '_blank');
     }
   }, [router]);
@@ -523,16 +469,13 @@ const ProfilePage: React.FC = () => {
   // Handle following a friend
   const handleFollowFriend = useCallback(async (friendId: string) => {
     if (!isAuthenticated || !currentUser) return;
-    
     try {
       await makeApiRequest(`/users/${friendId}/follow`, 'post');
       setDebug(prev => [...prev, `Successfully followed user ${friendId}`]);
-      
-      // Update the friends list to show the new following status
-      setFriends(prevFriends => 
-        prevFriends.map(friend => 
-          friend._id === friendId 
-            ? { ...friend, isFollowing: true } 
+      setFriends(prevFriends =>
+        prevFriends.map(friend =>
+          friend._id === friendId
+            ? { ...friend, isFollowing: true }
             : friend
         )
       );
@@ -541,21 +484,18 @@ const ProfilePage: React.FC = () => {
       console.error('Error following friend:', err);
       setDebug(prev => [...prev, `Error following friend ${friendId}: ${err.message}`]);
     }
-  }, [isAuthenticated, currentUser, makeApiRequest, setDebug]);
-  
+  }, [isAuthenticated, currentUser, makeApiRequest]);
+
   // Handle unfollowing a friend
   const handleUnfollowFriend = useCallback(async (friendId: string) => {
     if (!isAuthenticated || !currentUser) return;
-    
     try {
       await makeApiRequest(`/users/${friendId}/unfollow`, 'post');
       setDebug(prev => [...prev, `Successfully unfollowed user ${friendId}`]);
-      
-      // Update the friends list to show the new following status
-      setFriends(prevFriends => 
-        prevFriends.map(friend => 
-          friend._id === friendId 
-            ? { ...friend, isFollowing: false } 
+      setFriends(prevFriends =>
+        prevFriends.map(friend =>
+          friend._id === friendId
+            ? { ...friend, isFollowing: false }
             : friend
         )
       );
@@ -564,27 +504,20 @@ const ProfilePage: React.FC = () => {
       console.error('Error unfollowing friend:', err);
       setDebug(prev => [...prev, `Error unfollowing friend ${friendId}: ${err.message}`]);
     }
-  }, [isAuthenticated, currentUser, makeApiRequest, setDebug]);
+  }, [isAuthenticated, currentUser, makeApiRequest]);
 
   // Handle bio save
   const handleSaveBio = useCallback(async () => {
     if (!currentUser || !profile) return;
-    
     setSavingBio(true);
     setBioError(null);
-    
     try {
-      // Using the correct endpoint for updating user profile
       await makeApiRequest('/users/profile', 'put', { bio: bioValue });
       setDebug(prev => [...prev, `Bio updated successfully to: ${bioValue}`]);
-      
-      // Update the local profile state with new bio
       setProfile(prevProfile => {
         if (!prevProfile) return null;
         return { ...prevProfile, bio: bioValue };
       });
-      
-      // Exit edit mode
       setIsEditingBio(false);
     } catch (error: unknown) {
       const err = error as ApiError;
@@ -594,33 +527,27 @@ const ProfilePage: React.FC = () => {
     } finally {
       setSavingBio(false);
     }
-  }, [currentUser, profile, bioValue, makeApiRequest, setDebug]);
+  }, [currentUser, profile, bioValue, makeApiRequest]);
 
   // Handle cancel bio edit
   const handleCancelEditBio = useCallback(() => {
     setIsEditingBio(false);
     setBioValue(profile?.bio || '');
     setBioError(null);
-  }, [profile?.bio]);
-  
+  }, [profile]);
+
   // Handle save basic info
   const handleSaveBasicInfo = useCallback(async () => {
     if (!currentUser || !profile) return;
-    
     setSavingBasicInfo(true);
     setBasicInfoError(null);
-    
     try {
       await makeApiRequest('/users/profile', 'put', basicInfoValues);
       setDebug(prev => [...prev, `Basic info updated successfully: ${JSON.stringify(basicInfoValues)}`]);
-      
-      // Update the local profile state with new values
       setProfile(prevProfile => {
         if (!prevProfile) return null;
         return { ...prevProfile, ...basicInfoValues };
       });
-      
-      // Exit edit mode
       setIsEditingBasicInfo(false);
     } catch (error: unknown) {
       const err = error as ApiError;
@@ -630,12 +557,11 @@ const ProfilePage: React.FC = () => {
     } finally {
       setSavingBasicInfo(false);
     }
-  }, [currentUser, profile, basicInfoValues, makeApiRequest, setDebug]);
-  
+  }, [currentUser, profile, basicInfoValues, makeApiRequest]);
+
   // Handle cancel basic info edit
   const handleCancelEditBasicInfo = useCallback(() => {
     setIsEditingBasicInfo(false);
-    // Reset to profile values
     if (profile) {
       setBasicInfoValues({
         firstName: profile.firstName || '',
@@ -645,25 +571,19 @@ const ProfilePage: React.FC = () => {
     }
     setBasicInfoError(null);
   }, [profile]);
-  
+
   // Handle save work and education
   const handleSaveWorkEdu = useCallback(async () => {
     if (!currentUser || !profile) return;
-    
     setSavingWorkEdu(true);
     setWorkEduError(null);
-    
     try {
       await makeApiRequest('/users/profile', 'put', workEduValues);
       setDebug(prev => [...prev, `Work and education updated successfully: ${JSON.stringify(workEduValues)}`]);
-      
-      // Update the local profile state with new values
       setProfile(prevProfile => {
         if (!prevProfile) return null;
         return { ...prevProfile, ...workEduValues };
       });
-      
-      // Exit edit mode
       setIsEditingWorkEdu(false);
     } catch (error: unknown) {
       const err = error as ApiError;
@@ -673,12 +593,11 @@ const ProfilePage: React.FC = () => {
     } finally {
       setSavingWorkEdu(false);
     }
-  }, [currentUser, profile, workEduValues, makeApiRequest, setDebug]);
-  
+  }, [currentUser, profile, workEduValues, makeApiRequest]);
+
   // Handle cancel work and education edit
   const handleCancelEditWorkEdu = useCallback(() => {
     setIsEditingWorkEdu(false);
-    // Reset to profile values
     if (profile) {
       setWorkEduValues({
         work: profile.work || '',
@@ -696,10 +615,8 @@ const ProfilePage: React.FC = () => {
   // Handle follow toggle
   const handleFollowToggle = useCallback(async () => {
     if (!isAuthenticated || typeof id !== 'string' || !profile || !currentUser) return;
-
     const isCurrentlyFollowing = isFollowing;
     const endpoint = isCurrentlyFollowing ? `/users/${id}/unfollow` : `/users/${id}/follow`;
-
     try {
       await makeApiRequest(endpoint, 'post');
       setIsFollowing(!isCurrentlyFollowing);
@@ -714,7 +631,7 @@ const ProfilePage: React.FC = () => {
         }
         const updatedRelationshipStatus = prevProfile.relationshipStatus
           ? { ...prevProfile.relationshipStatus, isFollowing: !isCurrentlyFollowing }
-          : undefined;
+          : { isFollowing: !isCurrentlyFollowing }; // Initialize if undefined
         return { ...prevProfile, followers: updatedFollowers, relationshipStatus: updatedRelationshipStatus };
       });
     } catch (followErr: unknown) {
@@ -726,48 +643,48 @@ const ProfilePage: React.FC = () => {
 
   // Process friends data when tab changes
   useEffect(() => {
-    if (tabValue === 2 && !friendsInitialized && !loadingFriends) {
+    if (tabValue === 2 && profile && !friendsInitialized && !loadingFriends) { // Ensure profile is loaded
       fetchFriends();
     }
-  }, [tabValue, fetchFriends, loadingFriends, friendsInitialized]);
+  }, [tabValue, profile, fetchFriends, loadingFriends, friendsInitialized]);
 
   // Process photos data when tab changes
   useEffect(() => {
-    if (tabValue === 3 && !photosInitialized && !loadingPhotos) {
+    if (tabValue === 3 && profile && !photosInitialized && !loadingPhotos) { // Ensure profile is loaded
       fetchPhotos();
     }
-  }, [tabValue, fetchPhotos, photosInitialized, loadingPhotos]);
+  }, [tabValue, profile, fetchPhotos, photosInitialized, loadingPhotos]);
 
   // Update isOwnProfile when either profile or currentUser changes
   useEffect(() => {
     if (profile && currentUser) {
       setIsOwnProfile(currentUser._id === profile._id);
     } else {
-      setIsOwnProfile(null);
+      setIsOwnProfile(null); // Set to null or false if either is not available
     }
   }, [profile, currentUser]);
 
   useEffect(() => {
-    // Handle invalid ID logic
     if (router.isReady && (!id || id === 'undefined')) {
       console.log('Invalid profile ID:', id);
       if (currentUser?._id) {
         router.replace(`/profile/${currentUser._id}`);
       } else {
-        router.replace('/dashboard');
+        router.replace('/dashboard'); // Or your login page
       }
       return;
     }
 
-    const fetchProfileAndPosts = async () => {
+    const fetchProfileData = async () => { // Renamed from fetchProfileAndPosts to be more specific
       if (typeof id !== 'string' || !router.isReady) return;
 
       setLoading(true);
       setError(null);
       setProfile(null);
-      setPosts([]);
+      setPosts([]); // Reset local posts state
       setIsFollowing(false);
-      setFriendsInitialized(false); // Reset friends initialization status when loading a new profile
+      setFriendsInitialized(false); // Reset on new profile load
+      setPhotosInitialized(false); // Reset on new profile load
       setDebug(prev => [...prev, `Starting profile fetch for ID/Username: ${id}`]);
 
       try {
@@ -778,75 +695,69 @@ const ProfilePage: React.FC = () => {
 
         setDebug(prev => [...prev, `Using relative profile endpoint: ${profileEndpoint}`]);
         const profileResponse = await makeApiRequest(profileEndpoint);
-        
+
         if (profileResponse?.data) {
-        const profileData: Profile = profileResponse.data.profile || profileResponse.data;
-        setDebug(prev => [...prev, `Profile data received: Keys - ${Object.keys(profileData).join(', ')}`]);
-        
-        // Process friends data from profile response BEFORE setting the profile
-        // Use hasOwnProperty to avoid TypeScript errors
-        const hasFriends = Object.prototype.hasOwnProperty.call(profileData, 'friends') && 
-                          profileData.friends !== null && 
-                          Array.isArray(profileData.friends) && 
-                          profileData.friends.length > 0;
-        
-        if (hasFriends) {
-          const friendsList = profileData.friends as FriendUser[];
-          setDebug(prev => [...prev, `Processing ${friendsList.length} friends from profile data`]);
-          
-          if (currentUser) {
-            const friendsWithFollowingStatus = friendsList.map(friend => {
-              if (friend.isFollowing !== undefined) return friend;
-              
-              // Check if this friend is in the current user's following list
-              const isFollowing = currentUser.following && Array.isArray(currentUser.following) ? 
-                currentUser.following.some(followedId => String(followedId) === String(friend._id)) : 
-                false;
-              
-              return { ...friend, isFollowing };
+            const profileDataResult: Profile = profileResponse.data.profile || profileResponse.data;
+            setDebug(prev => [...prev, `Profile data received: Keys - ${Object.keys(profileDataResult).join(', ')}`]);
+
+            // Process friends data from profile response BEFORE setting the profile
+            const currentProfileFriends = profileDataResult.friends;
+            if (currentProfileFriends && Array.isArray(currentProfileFriends) && currentProfileFriends.length > 0) {
+              const friendsList = currentProfileFriends as FriendUser[];
+              setDebug(prev => [...prev, `Processing ${friendsList.length} friends from profile data`]);
+              if (currentUser) {
+                const friendsWithFollowingStatus = friendsList.map(friend => {
+                  if (friend.isFollowing !== undefined) return friend;
+                  const isFollowingVal = currentUser.following && Array.isArray(currentUser.following) ?
+                    currentUser.following.some(followedId => String(followedId) === String(friend._id)) :
+                    false;
+                  return { ...friend, isFollowing: isFollowingVal };
+                });
+                setFriends(friendsWithFollowingStatus);
+              } else {
+                setFriends(friendsList);
+              }
+              setFriendsInitialized(true);
+            } else {
+                setFriends([]); // Clear friends if not in profile data
+                setFriendsInitialized(false); // And ensure it tries to fetch if tab is active
+            }
+
+            setProfile(profileDataResult); // Set profile after friends processing
+
+            setBioValue(profileDataResult.bio || '');
+            setBasicInfoValues({
+              firstName: profileDataResult.firstName || '',
+              lastName: profileDataResult.lastName || '',
+              location: profileDataResult.location || ''
             });
-            
-            setFriends(friendsWithFollowingStatus);
-          } else {
-            setFriends(friendsList);
-          }
-          
-          setFriendsInitialized(true); // Mark friends as initialized
-        }
-          
-          // Now set the profile data
-          setProfile(profileData);
-          
-          // Initialize form values
-          setBioValue(profileData.bio || '');
-          setBasicInfoValues({
-            firstName: profileData.firstName || '',
-            lastName: profileData.lastName || '',
-            location: profileData.location || ''
-          });
-          setWorkEduValues({
-            work: profileData.work || '',
-            education: profileData.education || ''
-          });
+            setWorkEduValues({
+              work: profileDataResult.work || '',
+              education: profileDataResult.education || ''
+            });
 
-          if (currentUser && profileData.followers && Array.isArray(profileData.followers)) {
-            const isCurrentlyFollowing = profileData.followers.some(followerId => String(followerId) === currentUser._id);
-            setIsFollowing(isCurrentlyFollowing);
-            setDebug(prev => [...prev, `Set following status from followers array: ${isCurrentlyFollowing}`]);
-          }
-          else if (profileData.relationshipStatus?.isFollowing !== undefined) {
-            setIsFollowing(profileData.relationshipStatus.isFollowing);
-            setDebug(prev => [...prev, `Set following status from relationshipStatus: ${profileData.relationshipStatus?.isFollowing}`]);
-          }
+            if (currentUser && profileDataResult.followers && Array.isArray(profileDataResult.followers)) {
+                const isCurrentlyFollowing = profileDataResult.followers.some(followerId => String(followerId) === currentUser._id);
+                setIsFollowing(isCurrentlyFollowing);
+                setDebug(prev => [...prev, `Set following status from followers array: ${isCurrentlyFollowing}`]);
+            }
+            else if (profileDataResult.relationshipStatus?.isFollowing !== undefined) {
+                setIsFollowing(profileDataResult.relationshipStatus.isFollowing);
+                setDebug(prev => [...prev, `Set following status from relationshipStatus: ${profileDataResult.relationshipStatus?.isFollowing}`]);
+            }
 
-          if (profileData.recentPosts && Array.isArray(profileData.recentPosts)) {
-            setDebug(prev => [...prev, `Using recentPosts from profile response: ${profileData.recentPosts?.length} posts found`]);
-            setPosts(profileData.recentPosts);
-          } else if (!profileData.privacyRestricted) {
-            await fetchUserPosts();
-          }
+            // Handle recentPosts for display (e.g., in an intro section or if useGetUserPosts is not for the main list)
+            if (profileDataResult.recentPosts && Array.isArray(profileDataResult.recentPosts)) {
+                setDebug(prev => [...prev, `Using recentPosts from profile response: ${profileDataResult.recentPosts?.length} posts found`]);
+                setPosts(profileDataResult.recentPosts); // Sets the local 'posts' state
+            } else if (!profileDataResult.privacyRestricted && !userPostsData.length) {
+                // If no recent posts and privacy not restricted, and useGetUserPosts hasn't loaded posts,
+                // you might still want a separate fetch for specific posts or rely on useGetUserPosts.
+                // For now, this else if is less critical if useGetUserPosts handles the main list.
+                 setDebug(prev => [...prev, `No recent posts in profile, will rely on useGetUserPosts or fetchUserPosts if needed.`]);
+            }
         } else {
-          throw new Error('Profile data not found in API response.');
+            throw new Error('Profile data not found in API response.');
         }
       } catch (error: unknown) {
         const err = error as ApiError;
@@ -859,36 +770,21 @@ const ProfilePage: React.FC = () => {
       }
     };
 
-    const fetchUserPosts = async () => {
-      if (typeof id !== 'string') return;
-      try {
-        const postsEndpoint = `/posts/user/${id}`;
-        setDebug(prev => [...prev, `Fetching posts separately from relative endpoint: ${postsEndpoint}`]);
-        const postsResponse = await makeApiRequest(postsEndpoint);
-        const postsData = postsResponse?.data?.posts || (Array.isArray(postsResponse?.data) ? postsResponse.data : []);
-        setDebug(prev => [...prev, `Found ${postsData.length} posts separately.`]);
-        setPosts(postsData);
-      } catch (error: unknown) {
-        const err = error as ApiError;
-        setDebug(prev => [...prev, `Error fetching posts separately: ${err.message}`]);
-        setPosts([]);
-      }
-    };
+    fetchProfileData();
+  }, [id, currentUser, router.isReady, makeApiRequest]); // Removed router from deps, added router.isReady
 
-    fetchProfileAndPosts();
-
-  }, [id, currentUser, router, makeApiRequest]);
-
-  if (loading) {
+  // Conditional Renders for loading/error states
+  if (loading) { // General page loading
     return <Container sx={{ py: 8, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Container>;
   }
-  if (error && !profile) {
+  if (error && !profile) { // If error and no profile, show error
     return <Container sx={{ py: 8 }}><Alert severity="error" sx={{ mb: 3 }}>{error}</Alert></Container>;
   }
-  if (!profile) {
+  if (!profile) { // If no profile after loading (and no error shown above), show generic message
     return <Container sx={{ py: 8 }}><Typography variant="h6" align="center">Profile could not be loaded.</Typography></Container>;
   }
 
+  // Privacy Restricted View
   if (profile.privacyRestricted && !isOwnProfile) {
      return (
         <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -903,10 +799,10 @@ const ProfilePage: React.FC = () => {
      );
   }
 
-  // Calculate these after all hooks have been called
+  // Derived variables for rendering (safe to call now as profile is guaranteed)
   const profileAvatarUrl = getFullImageUrl(profile.profilePicture, 'profile');
   const coverPhotoUrl = getFullImageUrl(profile.coverPhoto, 'cover');
-  console.log(`[coverPhotoUrl] =  ${coverPhotoUrl}`);
+  // console.log(`[coverPhotoUrl] =  ${coverPhotoUrl}`);
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -917,19 +813,12 @@ const ProfilePage: React.FC = () => {
               src={coverPhotoUrl}
               alt={`${profile.username}'s cover photo`}
               fill
-              style={{
-                objectFit: 'cover',
-                objectPosition: 'center'
-              }}
-              onError={(e) => {
-                console.error("Error loading cover image:", e);
-                // We can't directly manipulate style in Next.js Image component like with img
-                // Instead, you might need to set a state to conditionally render the image
-              }}
-          />
+              style={{ objectFit: 'cover', objectPosition: 'center' }}
+              priority // Consider adding priority for LCP elements
+              onError={(e) => { console.error("Error loading cover image:", e); (e.target as HTMLImageElement).style.display = 'none';}}
+            />
           )}
         </Box>
-
         <Box sx={{ px: 4, pb: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'center', md: 'flex-end' }, position: 'relative' }}>
           <Avatar src={profileAvatarUrl} alt={profile.username} sx={{ width: 150, height: 150, border: '4px solid', borderColor: 'background.paper', marginTop: '-75px', boxShadow: 2, mr: { md: 3 } }} />
           <Box sx={{ flex: 1, mt: { xs: 2, md: 0 }, textAlign: { xs: 'center', md: 'left' } }}>
@@ -955,19 +844,22 @@ const ProfilePage: React.FC = () => {
         </Tabs>
       </Paper>
 
-      {/* Posts Tab */}
+      {/* Posts Tab - Using data from useGetUserPosts */}
       <Box sx={{ display: tabValue === 0 ? 'block' : 'none' }}>
-        {posts.length > 0 ? (
+        {userPostsLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+        ) : userPostsData.length > 0 ? (
           <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
             <Box sx={{ width: { xs: '100%', md: '33.33%' }, order: { xs: 2, md: 1 } }}>
               <Paper sx={{ p: 3, borderRadius: 2, position: 'sticky', top: 80 }}>
                 <Typography variant="h6" gutterBottom>Intro</Typography>
                 {profile.bio ? ( <Typography variant="body2">{profile.bio}</Typography> ) : ( <Typography variant="body2" color="text.secondary">No bio available</Typography> )}
+                {/* You could display profile.recentPosts (now in 'posts' state) here if different from userPostsData */}
                 {isOwnProfile && ( <Button fullWidth variant="outlined" sx={{ mt: 2 }} onClick={() => router.push('/settings/profile')}> Edit Details </Button> )}
               </Paper>
             </Box>
             <Box sx={{ width: { xs: '100%', md: '66.67%' }, order: { xs: 1, md: 2 } }}>
-              {posts.map((post) => ( <PostCard key={post._id} post={post} /> ))}
+              {userPostsData.map((post) => ( <PostCard key={post._id} post={post} /> ))}
             </Box>
           </Box>
         ) : (
@@ -979,397 +871,110 @@ const ProfilePage: React.FC = () => {
       <Box sx={{ display: tabValue === 1 ? 'block' : 'none' }}>
         <Paper sx={{ p: 4, borderRadius: 2 }}>
           <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
-            {/* Left sidebar for navigation within About section */}
             <Box sx={{ width: { xs: '100%', md: '30%' } }}>
-              <Typography variant="h6" gutterBottom sx={{ borderBottom: 1, borderColor: 'divider', pb: 1 }}>
-                About
-              </Typography>
-              
+              <Typography variant="h6" gutterBottom sx={{ borderBottom: 1, borderColor: 'divider', pb: 1 }}>About</Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
-                <Button 
-                  variant="text" 
-                  sx={{ 
-                    justifyContent: 'flex-start',
-                    px: 2,
-                    py: 1,
-                    borderRadius: 1,
-                    '&:hover': { bgcolor: 'action.hover' },
-                    bgcolor: 'action.selected'
-                  }}
-                >
-                  Overview
-                </Button>
-                <Button 
-                  variant="text" 
-                  sx={{ 
-                    justifyContent: 'flex-start',
-                    px: 2,
-                    py: 1,
-                    borderRadius: 1,
-                    '&:hover': { bgcolor: 'action.hover' }
-                  }}
-                >
-                  Work and Education
-                </Button>
-                <Button 
-                  variant="text" 
-                  sx={{ 
-                    justifyContent: 'flex-start',
-                    px: 2,
-                    py: 1,
-                    borderRadius: 1,
-                    '&:hover': { bgcolor: 'action.hover' }
-                  }}
-                >
-                  Contact and Basic Info
-                </Button>
-                <Button 
-                  variant="text" 
-                  sx={{ 
-                    justifyContent: 'flex-start',
-                    px: 2,
-                    py: 1,
-                    borderRadius: 1,
-                    '&:hover': { bgcolor: 'action.hover' }
-                  }}
-                >
-                  Details About {profile.firstName}
-                </Button>
+                {/* Navigation buttons for About sections */}
+                <Button variant="text" sx={{ justifyContent: 'flex-start', px: 2, py: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' }, bgcolor: 'action.selected' }}>Overview</Button>
+                <Button variant="text" sx={{ justifyContent: 'flex-start', px: 2, py: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}>Work and Education</Button>
+                <Button variant="text" sx={{ justifyContent: 'flex-start', px: 2, py: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}>Contact and Basic Info</Button>
+                <Button variant="text" sx={{ justifyContent: 'flex-start', px: 2, py: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}>Details About {profile.firstName}</Button>
               </Box>
             </Box>
-            
-            {/* Right content area */}
             <Box sx={{ width: { xs: '100%', md: '70%' } }}>
+              {/* Bio Section */}
               <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6">Bio</Typography>
-                  {isOwnProfile && !isEditingBio && (
-                    <Button 
-                      variant="outlined" 
-                      size="small" 
-                      startIcon={<EditIcon />}
-                      onClick={() => setIsEditingBio(true)}
-                    >
-                      Edit
-                    </Button>
-                  )}
+                  {isOwnProfile && !isEditingBio && (<Button variant="outlined" size="small" startIcon={<EditIcon />} onClick={() => setIsEditingBio(true)}>Edit</Button>)}
                 </Box>
-                
                 {isEditingBio ? (
                   <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveBio(); }}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={4}
-                      value={bioValue}
-                      onChange={(e) => setBioValue(e.target.value)}
-                      placeholder="Tell people about yourself..."
-                      variant="outlined"
-                      error={!!bioError}
-                      helperText={bioError}
-                      sx={{ mb: 2 }}
-                    />
+                    <TextField fullWidth multiline rows={4} value={bioValue} onChange={(e) => setBioValue(e.target.value)} placeholder="Tell people about yourself..." variant="outlined" error={!!bioError} helperText={bioError} sx={{ mb: 2 }}/>
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                      <Button 
-                        variant="text" 
-                        onClick={handleCancelEditBio}
-                        disabled={savingBio}
-                      >
-                        Cancel
-                      </Button>
-                      <Button 
-                        variant="contained" 
-                        type="submit"
-                        disabled={savingBio}
-                        startIcon={savingBio ? <CircularProgress size={16} /> : null}
-                      >
-                        Save
-                      </Button>
+                      <Button variant="text" onClick={handleCancelEditBio} disabled={savingBio}>Cancel</Button>
+                      <Button variant="contained" type="submit" disabled={savingBio} startIcon={savingBio ? <CircularProgress size={16} /> : null}>Save</Button>
                     </Box>
                   </Box>
                 ) : (
-                  <>
-                    {profile.bio ? (
-                      <Typography variant="body1">{profile.bio}</Typography>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                        {isOwnProfile ? 'Add a bio to tell people more about yourself' : 'No bio available'}
-                      </Typography>
-                    )}
-                  </>
+                  profile.bio ? <Typography variant="body1">{profile.bio}</Typography> : <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>{isOwnProfile ? 'Add a bio...' : 'No bio available'}</Typography>
                 )}
               </Paper>
-              
+              {/* Basic Info Section */}
               <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6">Basic Information</Typography>
-                  {isOwnProfile && !isEditingBasicInfo && (
-                    <Button 
-                      variant="outlined" 
-                      size="small" 
-                      startIcon={<EditIcon />}
-                      onClick={() => setIsEditingBasicInfo(true)}
-                    >
-                      Edit
-                    </Button>
-                  )}
+                  {isOwnProfile && !isEditingBasicInfo && (<Button variant="outlined" size="small" startIcon={<EditIcon />} onClick={() => setIsEditingBasicInfo(true)}>Edit</Button>)}
                 </Box>
-                
                 {isEditingBasicInfo ? (
-                  <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveBasicInfo(); }}>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 2 }}>
-                      <TextField
-                        label="First Name"
-                        value={basicInfoValues.firstName}
-                        onChange={(e) => setBasicInfoValues(prev => ({ ...prev, firstName: e.target.value }))}
-                        fullWidth
-                        variant="outlined"
-                        required
-                      />
-                      <TextField
-                        label="Last Name"
-                        value={basicInfoValues.lastName}
-                        onChange={(e) => setBasicInfoValues(prev => ({ ...prev, lastName: e.target.value }))}
-                        fullWidth
-                        variant="outlined"
-                        required
-                      />
+                    <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveBasicInfo(); }}>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 2 }}>
+                            <TextField label="First Name" value={basicInfoValues.firstName} onChange={(e) => setBasicInfoValues(prev => ({ ...prev, firstName: e.target.value }))} fullWidth variant="outlined" required/>
+                            <TextField label="Last Name" value={basicInfoValues.lastName} onChange={(e) => setBasicInfoValues(prev => ({ ...prev, lastName: e.target.value }))} fullWidth variant="outlined" required/>
+                        </Box>
+                        <TextField label="Location" value={basicInfoValues.location} onChange={(e) => setBasicInfoValues(prev => ({ ...prev, location: e.target.value }))} fullWidth variant="outlined" placeholder="Where do you live?" sx={{ mb: 2 }}/>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                            <Typography variant="subtitle2" sx={{ mr: 1 }}>Username:</Typography>
+                            <Typography variant="body1">@{profile.username}</Typography>
+                            <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>(cannot be changed)</Typography>
+                        </Box>
+                        {basicInfoError && (<Alert severity="error" sx={{ mb: 2 }}>{basicInfoError}</Alert>)}
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                            <Button variant="text" onClick={handleCancelEditBasicInfo} disabled={savingBasicInfo}>Cancel</Button>
+                            <Button variant="contained" type="submit" disabled={savingBasicInfo} startIcon={savingBasicInfo ? <CircularProgress size={16} /> : null}>Save</Button>
+                        </Box>
                     </Box>
-                    
-                    <TextField
-                      label="Location"
-                      value={basicInfoValues.location}
-                      onChange={(e) => setBasicInfoValues(prev => ({ ...prev, location: e.target.value }))}
-                      fullWidth
-                      variant="outlined"
-                      placeholder="Where do you live?"
-                      sx={{ mb: 2 }}
-                    />
-                    
-                    {/* Username (display only) */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <Typography variant="subtitle2" sx={{ mr: 1 }}>Username:</Typography>
-                      <Typography variant="body1">@{profile.username}</Typography>
-                      <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>(cannot be changed)</Typography>
-                    </Box>
-                    
-                    {basicInfoError && (
-                      <Alert severity="error" sx={{ mb: 2 }}>
-                        {basicInfoError}
-                      </Alert>
-                    )}
-                    
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                      <Button 
-                        variant="text" 
-                        onClick={handleCancelEditBasicInfo}
-                        disabled={savingBasicInfo}
-                      >
-                        Cancel
-                      </Button>
-                      <Button 
-                        variant="contained" 
-                        type="submit"
-                        disabled={savingBasicInfo}
-                        startIcon={savingBasicInfo ? <CircularProgress size={16} /> : null}
-                      >
-                        Save
-                      </Button>
-                    </Box>
-                  </Box>
                 ) : (
-                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'auto 1fr' }, gap: '12px', alignItems: 'start' }}>
-                    <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
-                      Name:
-                    </Typography>
-                    <Typography variant="body1">
-                      {profile.firstName} {profile.lastName}
-                    </Typography>
-                    
-                    <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
-                      Username:
-                    </Typography>
-                    <Typography variant="body1">
-                      @{profile.username}
-                    </Typography>
-                    
-                    <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
-                      Location:
-                    </Typography>
-                    <Typography variant="body1">
-                      {profile.location || (isOwnProfile ? 'Add your location' : 'No location provided')}
-                    </Typography>
-                    
-                    {profile.birthday && (
-                      <>
-                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
-                          Birthday:
-                        </Typography>
-                        <Typography variant="body1">
-                          {new Date(profile.birthday).toLocaleDateString()}
-                        </Typography>
-                      </>
-                    )}
-                    
-                    {profile.joinedDate && (
-                      <>
-                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
-                          Joined:
-                        </Typography>
-                        <Typography variant="body1">
-                          {new Date(profile.createdAt || profile.joinedDate).toLocaleDateString()}
-                        </Typography>
-                      </>
-                    )}
-                  </Box>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'auto 1fr' }, gap: '12px', alignItems: 'start' }}>
+                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Name:</Typography>
+                        <Typography variant="body1">{profile.firstName} {profile.lastName}</Typography>
+                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Username:</Typography>
+                        <Typography variant="body1">@{profile.username}</Typography>
+                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Location:</Typography>
+                        <Typography variant="body1">{profile.location || (isOwnProfile ? 'Add your location' : 'No location provided')}</Typography>
+                        {profile.birthday && (<><Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Birthday:</Typography><Typography variant="body1">{new Date(profile.birthday).toLocaleDateString()}</Typography></>)}
+                        {profile.joinedDate && (<><Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Joined:</Typography><Typography variant="body1">{new Date(profile.createdAt || profile.joinedDate).toLocaleDateString()}</Typography></>)}
+                    </Box>
                 )}
               </Paper>
-              
               {/* Work and Education Section */}
               <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">Work and Education</Typography>
-                  {isOwnProfile && !isEditingWorkEdu && (
-                    <Button 
-                      variant="outlined" 
-                      size="small" 
-                      startIcon={<EditIcon />}
-                      onClick={() => setIsEditingWorkEdu(true)}
-                    >
-                      {!profile.work && !profile.education ? 'Add' : 'Edit'}
-                    </Button>
-                  )}
+                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h6">Work and Education</Typography>
+                    {isOwnProfile && !isEditingWorkEdu && (<Button variant="outlined" size="small" startIcon={<EditIcon />} onClick={() => setIsEditingWorkEdu(true)}>{!profile.work && !profile.education ? 'Add' : 'Edit'}</Button>)}
                 </Box>
-                
                 {isEditingWorkEdu ? (
-                  <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveWorkEdu(); }}>
-                    <TextField
-                      label="Work"
-                      value={workEduValues.work}
-                      onChange={(e) => setWorkEduValues(prev => ({ ...prev, work: e.target.value }))}
-                      fullWidth
-                      variant="outlined"
-                      placeholder="Where do you work?"
-                      sx={{ mb: 2 }}
-                    />
-                    
-                    <TextField
-                      label="Education"
-                      value={workEduValues.education}
-                      onChange={(e) => setWorkEduValues(prev => ({ ...prev, education: e.target.value }))}
-                      fullWidth
-                      variant="outlined"
-                      placeholder="Where did you study?"
-                      sx={{ mb: 2 }}
-                    />
-                    
-                    {workEduError && (
-                      <Alert severity="error" sx={{ mb: 2 }}>
-                        {workEduError}
-                      </Alert>
-                    )}
-                    
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                      <Button 
-                        variant="text" 
-                        onClick={handleCancelEditWorkEdu}
-                        disabled={savingWorkEdu}
-                      >
-                        Cancel
-                      </Button>
-                      <Button 
-                        variant="contained" 
-                        type="submit"
-                        disabled={savingWorkEdu}
-                        startIcon={savingWorkEdu ? <CircularProgress size={16} /> : null}
-                      >
-                        Save
-                      </Button>
+                    <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveWorkEdu(); }}>
+                        <TextField label="Work" value={workEduValues.work} onChange={(e) => setWorkEduValues(prev => ({ ...prev, work: e.target.value }))} fullWidth variant="outlined" placeholder="Where do you work?" sx={{ mb: 2 }}/>
+                        <TextField label="Education" value={workEduValues.education} onChange={(e) => setWorkEduValues(prev => ({ ...prev, education: e.target.value }))} fullWidth variant="outlined" placeholder="Where did you study?" sx={{ mb: 2 }}/>
+                        {workEduError && (<Alert severity="error" sx={{ mb: 2 }}>{workEduError}</Alert>)}
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                            <Button variant="text" onClick={handleCancelEditWorkEdu} disabled={savingWorkEdu}>Cancel</Button>
+                            <Button variant="contained" type="submit" disabled={savingWorkEdu} startIcon={savingWorkEdu ? <CircularProgress size={16} /> : null}>Save</Button>
+                        </Box>
                     </Box>
-                  </Box>
                 ) : (
-                  !profile.education && !profile.work ? (
-                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                      {isOwnProfile ? 'Add your work and education information' : 'No work or education information available'}
-                    </Typography>
-                  ) : (
-                    <>
-                      {profile.work && (
-                        <Box sx={{ mb: 2 }}>
-                          <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
-                            Work
-                          </Typography>
-                          <Typography variant="body1">
-                            {profile.work}
-                          </Typography>
-                        </Box>
-                      )}
-                      
-                      {profile.education && (
-                        <Box>
-                          <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
-                            Education
-                          </Typography>
-                          <Typography variant="body1">
-                            {profile.education}
-                          </Typography>
-                        </Box>
-                      )}
-                    </>
-                  )
+                    !profile.education && !profile.work ? (
+                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>{isOwnProfile ? 'Add your work and education...' : 'No work or education info'}</Typography>
+                    ) : (
+                        <>{profile.work && (<Box sx={{ mb: 2 }}><Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>Work</Typography><Typography variant="body1">{profile.work}</Typography></Box>)}{profile.education && (<Box><Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>Education</Typography><Typography variant="body1">{profile.education}</Typography></Box>)}</>
+                    )
                 )}
               </Paper>
-              
-              {/* Contact Information */}
+              {/* Contact Info Section */}
               <Paper variant="outlined" sx={{ p: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">Contact Information</Typography>
-                  {isOwnProfile && (
-                    <Button variant="outlined" size="small" startIcon={<EditIcon />}>
-                      Edit
-                    </Button>
-                  )}
+                    <Typography variant="h6">Contact Information</Typography>
+                    {isOwnProfile && (<Button variant="outlined" size="small" startIcon={<EditIcon />}>Edit</Button>)}
                 </Box>
-                
                 {!profile.email && !profile.website && !profile.phone ? (
-                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                    {isOwnProfile ? 'Add your contact information' : 'No contact information available'}
-                  </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>{isOwnProfile ? 'Add contact info...' : 'No contact info'}</Typography>
                 ) : (
-                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'auto 1fr' }, gap: '12px', alignItems: 'start' }}>
-                    {profile.email && (
-                      <>
-                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
-                          Email:
-                        </Typography>
-                        <Typography variant="body1">
-                          {profile.email}
-                        </Typography>
-                      </>
-                    )}
-                    
-                    {profile.phone && (
-                      <>
-                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
-                          Phone:
-                        </Typography>
-                        <Typography variant="body1">
-                          {profile.phone}
-                        </Typography>
-                      </>
-                    )}
-                    
-                    {profile.website && (
-                      <>
-                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>
-                          Website:
-                        </Typography>
-                        <Typography variant="body1" component="a" href={profile.website} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
-                          {profile.website}
-                        </Typography>
-                      </>
-                    )}
-                  </Box>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'auto 1fr' }, gap: '12px', alignItems: 'start' }}>
+                        {profile.email && (<><Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Email:</Typography><Typography variant="body1">{profile.email}</Typography></>)}
+                        {profile.phone && (<><Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Phone:</Typography><Typography variant="body1">{profile.phone}</Typography></>)}
+                        {profile.website && (<><Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Website:</Typography><Typography variant="body1" component="a" href={profile.website} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>{profile.website}</Typography></>)}
+                    </Box>
                 )}
               </Paper>
             </Box>
@@ -1382,112 +987,32 @@ const ProfilePage: React.FC = () => {
         <Paper sx={{ p: 4, borderRadius: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h5">Friends</Typography>
-            {isOwnProfile && (
-              <Button variant="outlined" startIcon={<PersonAddIcon />} onClick={() => router.push('/friends/find')}>
-                Find Friends
-              </Button>
-            )}
+            {isOwnProfile && (<Button variant="outlined" startIcon={<PersonAddIcon />} onClick={() => router.push('/friends/find')}>Find Friends</Button>)}
           </Box>
-          
-          {friendsError && (
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {friendsError}
-            </Alert>
-          )}
-          
-          {loadingFriends ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
-            </Box>
+          {friendsError && (<Alert severity="error" sx={{ mb: 3 }}>{friendsError}</Alert>)}
+          {loadingFriends ? (<Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
           ) : friendsInitialized && friends.length > 0 ? (
             <Grid container spacing={2}>
               {friends.map((friend) => (
-                <Grid size={{xs:12,sm:6,md:4,lg:3}} key={friend._id}>
-                  <Paper 
-                    variant="outlined" 
-                    sx={{ 
-                      p: 2, 
-                      display: 'flex', 
-                      flexDirection: 'column', 
-                      alignItems: 'center',
-                      height: '100%', 
-                      transition: 'transform 0.2s, box-shadow 0.2s',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: 3
-                      }
-                    }}
-                  >
-                    <Avatar 
-                      src={getFullImageUrl(friend.profilePicture, 'profile')} 
-                      alt={friend.username}
-                      sx={{ width: 80, height: 80, mb: 1 }}
-                      onClick={() => router.push(`/profile/${friend._id}`)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    <Typography 
-                      variant="subtitle1" 
-                      sx={{ 
-                        fontWeight: 'bold', 
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        '&:hover': { textDecoration: 'underline' }
-                      }}
-                      onClick={() => router.push(`/profile/${friend._id}`)}
-                    >
-                      {friend.firstName} {friend.lastName}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: 'center' }}>
-                      @{friend.username}
-                    </Typography>
-                    
+                <Grid size={{xs:12,sm:6,md:4,lg:3}} key={friend._id}> {/* Changed Grid size prop to item and xs,sm,md,lg props */}
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', transition: 'transform 0.2s, box-shadow 0.2s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 3 } }}>
+                    <Avatar src={getFullImageUrl(friend.profilePicture, 'profile')} alt={friend.username} sx={{ width: 80, height: 80, mb: 1, cursor: 'pointer' }} onClick={() => router.push(`/profile/${friend._id}`)}/>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', textAlign: 'center', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }} onClick={() => router.push(`/profile/${friend._id}`)}>{friend.firstName} {friend.lastName}</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: 'center' }}>@{friend.username}</Typography>
                     {isAuthenticated && currentUser?._id !== friend._id && (
-                      <Button 
-                        variant={friend.isFollowing ? "outlined" : "contained"} 
-                        size="small" 
-                        startIcon={<PersonAddIcon />}
-                        fullWidth
-                        onClick={() => friend.isFollowing ? handleUnfollowFriend(friend._id) : handleFollowFriend(friend._id)}
-                      >
-                        {friend.isFollowing ? 'Unfollow' : 'Follow'}
-                      </Button>
+                      <Button variant={friend.isFollowing ? "outlined" : "contained"} size="small" startIcon={<PersonAddIcon />} fullWidth onClick={() => friend.isFollowing ? handleUnfollowFriend(friend._id) : handleFollowFriend(friend._id)}>{friend.isFollowing ? 'Unfollow' : 'Follow'}</Button>
                     )}
                   </Paper>
                 </Grid>
               ))}
             </Grid>
           ) : friendsInitialized ? (
-            <Box sx={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              py: 6, 
-              textAlign: 'center',
-              bgcolor: 'background.default',
-              borderRadius: 1
-            }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 6, textAlign: 'center', bgcolor: 'background.default', borderRadius: 1 }}>
               <PersonIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary">
-                {isOwnProfile ? 'You have no friends yet' : `${profile.firstName} has no friends yet`}
-              </Typography>
-              {isOwnProfile && (
-                <Button 
-                  variant="contained" 
-                  startIcon={<PersonAddIcon />} 
-                  sx={{ mt: 2 }}
-                  onClick={() => router.push('/friends/find')}
-                >
-                  Find Friends
-                </Button>
-              )}
+              <Typography variant="h6" color="text.secondary">{isOwnProfile ? 'You have no friends yet' : `${profile.firstName} has no friends yet`}</Typography>
+              {isOwnProfile && (<Button variant="contained" startIcon={<PersonAddIcon />} sx={{ mt: 2 }} onClick={() => router.push('/friends/find')}>Find Friends</Button>)}
             </Box>
-          ) : (
-            // Add this fallback to cover the gap between initializing and loading
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
-            </Box>
-          )}
+          ) : (<Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>)}
         </Paper>
       </Box>
 
@@ -1496,100 +1021,24 @@ const ProfilePage: React.FC = () => {
         <Paper sx={{ p: 4, borderRadius: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h5">Photos</Typography>
-            {isOwnProfile && (
-              <Button 
-                variant="outlined" 
-                startIcon={<ImageIcon />} 
-                onClick={() => router.push('/photos/upload')}
-              >
-                Upload Photos
-              </Button>
-            )}
+            {isOwnProfile && (<Button variant="outlined" startIcon={<ImageIcon />} onClick={() => router.push('/photos/upload')}>Upload Photos</Button>)}
           </Box>
-          
-          {photosError && (
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {photosError}
-            </Alert>
-          )}
-          
-          {loadingPhotos ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : photos.length > 0 ? (
-            <ImageList 
-              variant="masonry" 
-              cols={getGridCols()} 
-              gap={8}
-            >
-              {photos.map((photo) => (
-                <ImageListItem 
-                  key={photo._id} 
-                  onClick={() => handlePhotoClick(photo)}
-                  sx={{ 
-                    cursor: 'pointer',
-                    '&:hover': {
-                      opacity: 0.9,
-                      transform: 'scale(1.02)',
-                      transition: 'all 0.2s ease-in-out'
-                    }
-                  }}
-                >
-                  <img
-                    src={photo.url}
-                    alt={photo.caption || 'Photo'}
-                    loading="lazy"
-                    style={{ borderRadius: 8 }}
-                    onError={(e) => {
-                      console.error(`Failed to load image: ${photo.url}`);
-                      (e.target as HTMLImageElement).src = '/images/placeholder-image.png';
-                    }}
-                  />
-                  <ImageListItemBar
-                    title={photo.caption}
-                    subtitle={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <LikeIcon fontSize="small" sx={{ mr: 0.5 }} />
-                          {photo.likes || 0}
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <CommentIcon fontSize="small" sx={{ mr: 0.5 }} />
-                          {photo.comments || 0}
-                        </Box>
-                      </Box>
-                    }
-                    sx={{ borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }}
-                  />
+          {photosError && (<Alert severity="error" sx={{ mb: 3 }}>{photosError}</Alert>)}
+          {loadingPhotos ? (<Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+          ) : photosData.length > 0 ? (
+            <ImageList variant="masonry" cols={getGridCols()} gap={8}>
+              {photosData.map((photo) => (
+                <ImageListItem key={photo._id} onClick={() => handlePhotoClick(photo)} sx={{ cursor: 'pointer', '&:hover': { opacity: 0.9, transform: 'scale(1.02)', transition: 'all 0.2s ease-in-out' } }}>
+                  <img src={photo.url} alt={photo.caption || 'Photo'} loading="lazy" style={{ borderRadius: 8, display: 'block', width: '100%', height: 'auto' }} onError={(e) => { console.error(`Failed to load image: ${photo.url}`); (e.target as HTMLImageElement).src = '/images/placeholder-image.png'; /* Ensure placeholder exists */ }}/>
+                  <ImageListItemBar title={photo.caption} subtitle={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ display: 'flex', alignItems: 'center' }}><LikeIcon fontSize="small" sx={{ mr: 0.5 }} />{photo.likes || 0}</Box><Box sx={{ display: 'flex', alignItems: 'center' }}><CommentIcon fontSize="small" sx={{ mr: 0.5 }} />{photo.comments || 0}</Box></Box>} sx={{ borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }}/>
                 </ImageListItem>
               ))}
             </ImageList>
           ) : (
-            <Box sx={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              py: 6, 
-              textAlign: 'center',
-              bgcolor: 'background.default',
-              borderRadius: 1
-            }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 6, textAlign: 'center', bgcolor: 'background.default', borderRadius: 1 }}>
               <ImageIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary">
-                {isOwnProfile ? 'You have no photos yet' : `${profile.firstName} has no photos yet`}
-              </Typography>
-              {isOwnProfile && (
-                <Button 
-                  variant="contained" 
-                  startIcon={<ImageIcon />} 
-                  sx={{ mt: 2 }}
-                  onClick={() => router.push('/photos/upload')}
-                >
-                  Upload Photos
-                </Button>
-              )}
+              <Typography variant="h6" color="text.secondary">{isOwnProfile ? 'You have no photos yet' : `${profile.firstName} has no photos to display`}</Typography>
+              {isOwnProfile && (<Button variant="contained" startIcon={<ImageIcon />} sx={{ mt: 2 }} onClick={() => router.push('/photos/upload')}>Upload Photos</Button>)}
             </Box>
           )}
         </Paper>

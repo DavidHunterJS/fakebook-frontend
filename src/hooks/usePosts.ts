@@ -76,3 +76,34 @@ export const useDeletePost = () => {
     },
   });
 };
+// Add this to your usePosts.ts file
+export const useGetUserPosts = (userId: string | undefined) => {
+  return useQuery<Post[]>({
+    queryKey: ['posts', 'user', userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      
+      const response = await api.get(`/posts/user/${userId}`);
+      
+      // Extract posts from whatever format the API returns
+      const rawData: unknown = response.data;
+      
+      if (Array.isArray(rawData)) {
+        return rawData as Post[];
+      }
+      
+      if (typeof rawData === 'object' && rawData !== null) {
+        // Check for rawData.posts
+        if (
+          'posts' in (rawData as Record<string, unknown>) && 
+          Array.isArray((rawData as Record<string, unknown>).posts)
+        ) {
+          return (rawData as Record<string, unknown[]>).posts as Post[];
+        }
+      }
+      
+      return [] as Post[];
+    },
+    enabled: !!userId
+  });
+};
