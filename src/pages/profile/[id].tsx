@@ -6,6 +6,7 @@ import ImageListItem from '@mui/material/ImageListItem';
 import ImageListItemBar from '@mui/material/ImageListItemBar';
 import { useMediaQuery, useTheme } from '@mui/material';
 import { useGetUserPosts } from '../../hooks/usePosts'; // Ensure this path is correct
+import PostForm from '../../components/post/PostForm';
 import {
   Container,
   Box,
@@ -19,6 +20,11 @@ import {
   Alert,
   TextField,
   Grid,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
 } from '@mui/material';
 import {
   PersonAdd as PersonAddIcon,
@@ -26,7 +32,8 @@ import {
   Person as PersonIcon,
   Image as ImageIcon,
   Favorite as LikeIcon,
-  Comment as CommentIcon
+  Comment as CommentIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import useAuth from '../../hooks/useAuth'; // Adjust path if needed
 import api from '../../utils/api'; // Adjust path if needed
@@ -57,6 +64,13 @@ const isLikelyObjectIdString = (id: string): boolean => {
 
 // Extend the User type to include isFollowing property
 interface FriendUser extends User {
+  isFollowing?: boolean;
+}
+
+// Add a suggested friends interface
+interface SuggestedFriend extends User {
+  mutualFriendsCount?: number;
+  isRequested?: boolean;
   isFollowing?: boolean;
 }
 
@@ -109,6 +123,15 @@ interface AlbumPhoto {
   comments?: Array<string> | number;
 }
 
+// Add PostFormProps interface for extended PostForm
+// interface PostFormProps {
+//   initialMode?: 'text' | 'photo';
+//   disableTextOnly?: boolean;
+//   onSubmitSuccess?: () => void;
+//   customSubmitButtonText?: string;
+//   dialogMode?: boolean;
+// }
+
 const ProfilePage: React.FC = () => {
   // Hooks must be called inside the component and at the top level
   const router = useRouter();
@@ -144,6 +167,11 @@ const ProfilePage: React.FC = () => {
   const [friendsError, setFriendsError] = useState<string | null>(null);
   const [friendsInitialized, setFriendsInitialized] = useState(false);
 
+  // Suggestions data
+  const [suggestions, setSuggestions] = useState<SuggestedFriend[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+
   // Photos data
   const [photosData, setPhotosData] = useState<Photo[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
@@ -175,6 +203,10 @@ const ProfilePage: React.FC = () => {
   const [savingWorkEdu, setSavingWorkEdu] = useState(false);
   const [workEduError, setWorkEduError] = useState<string | null>(null);
 
+  // Photo upload state
+  const [photoUploadOpen, setPhotoUploadOpen] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+
   // API request helper - memoized with useCallback
   const makeApiRequest = useCallback(async (url: string, method: 'get' | 'post' | 'put' | 'delete' = 'get', data?: unknown) => {
     const addDebug = (msg: string) => { console.log(msg); setDebug(prev => [...prev, msg]); };
@@ -202,6 +234,56 @@ const ProfilePage: React.FC = () => {
         throw error;
     }
   }, []); // setDebug is stable, so often omitted. Add if linting requires.
+
+  // Fetch suggestions function
+  const fetchSuggestions = useCallback(async () => {
+    if (!isAuthenticated || !currentUser) return;
+    
+    setLoadingSuggestions(true);
+    setSuggestionsError(null);
+    
+    try {
+      setDebug(prev => [...prev, `Fetching friend suggestions`]);
+      const response = await makeApiRequest('/friends/suggestions?limit=20', 'get');
+      
+      if (response?.data && response.data.suggestions) {
+        setDebug(prev => [...prev, `Found ${response.data.suggestions.length} friend suggestions`]);
+        setSuggestions(response.data.suggestions);
+      } else {
+        setSuggestions([]);
+      }
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      console.error('Error fetching friend suggestions:', err);
+      setSuggestionsError(err.response?.data?.message || err.message || 'Failed to load friend suggestions.');
+      setDebug(prev => [...prev, `Error fetching friend suggestions: ${err.message}`]);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  }, [isAuthenticated, currentUser, makeApiRequest]);
+
+  // Handle sending a friend request
+  const handleSendFriendRequest = useCallback(async (userId: string) => {
+    if (!isAuthenticated || !currentUser) return;
+    
+    try {
+      await makeApiRequest(`/friends/request/${userId}`, 'post');
+      setDebug(prev => [...prev, `Friend request sent to user ${userId}`]);
+      
+      // Update the suggestions list to show the request has been sent
+      setSuggestions(prevSuggestions => 
+        prevSuggestions.map(suggestion => 
+          suggestion._id === userId 
+            ? { ...suggestion, isRequested: true } 
+            : suggestion
+        )
+      );
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      console.error('Error sending friend request:', err);
+      setDebug(prev => [...prev, `Error sending friend request to ${userId}: ${err.message}`]);
+    }
+  }, [isAuthenticated, currentUser, makeApiRequest]);
 
   // Fetch friends function
   const fetchFriends = useCallback(async () => {
@@ -236,7 +318,7 @@ const ProfilePage: React.FC = () => {
     setFriendsError(null);
     try {
       if (currentUser && profile._id === currentUser._id) {
-        setDebug(prev => [...prev, `Workspaceing own friends from /friends endpoint`]);
+        setDebug(prev => [...prev, `Fetching own friends from /friends endpoint`]);
         try {
           const response = await makeApiRequest('/friends');
           if (response?.data && response.data.friends) {
@@ -248,7 +330,8 @@ const ProfilePage: React.FC = () => {
             return;
           }
         } catch (e) {
-          setDebug(prev => [...prev, `Failed to get friends from /friends endpoint, trying alternative: ${(e as Error).message}`]);
+          const error = e as Error;
+          setDebug(prev => [...prev, `Failed to get friends from /friends endpoint, trying alternative: ${error.message}`]);
         }
       }
 
@@ -277,7 +360,8 @@ const ProfilePage: React.FC = () => {
           }
         }
       } catch (e) {
-        setDebug(prev => [...prev, `Failed to get user profile with friends included: ${(e as Error).message}`]);
+        const error = e as Error;
+        setDebug(prev => [...prev, `Failed to get user profile with friends included: ${error.message}`]);
       }
 
       if (currentUser && profile._id !== currentUser._id) {
@@ -307,7 +391,8 @@ const ProfilePage: React.FC = () => {
             }
           }
         } catch (e) {
-          setDebug(prev => [...prev, `Failed to get mutual friends: ${(e as Error).message}`]);
+          const error = e as Error;
+          setDebug(prev => [...prev, `Failed to get mutual friends: ${error.message}`]);
         }
       }
       setDebug(prev => [...prev, 'No friends data found from any endpoint']);
@@ -335,7 +420,7 @@ const ProfilePage: React.FC = () => {
     setLoadingPhotos(true);
     setPhotosError(null);
     try {
-      setDebug(prev => [...prev, `Workspaceing photos from user posts for ID: ${id}`]);
+      setDebug(prev => [...prev, `Fetching photos from user posts for ID: ${id}`]);
       let postsForMedia = posts; // Use the 'posts' state which might contain recentPosts
       if (!postsForMedia.length) { // If 'posts' state is empty, try fetching all user posts
         try {
@@ -348,11 +433,12 @@ const ProfilePage: React.FC = () => {
             const postsResponse = await makeApiRequest(`/posts/user/${id}`);
             if (postsResponse?.data?.posts || Array.isArray(postsResponse?.data)) {
                 postsForMedia = postsResponse.data.posts || postsResponse.data;
-                 setDebug(prev => [...prev, `Workspaceed ${postsForMedia.length} posts manually for media extraction`]);
+                 setDebug(prev => [...prev, `Fetched ${postsForMedia.length} posts manually for media extraction`]);
             }
           }
         } catch (e) {
-          setDebug(prev => [...prev, `Error fetching posts for photos: ${(e as Error).message}`]);
+          const error = e as Error;
+          setDebug(prev => [...prev, `Error fetching posts for photos: ${error.message}`]);
         }
       }
 
@@ -401,7 +487,8 @@ const ProfilePage: React.FC = () => {
           setDebug(prev => [...prev, `Extracted ${photosFromAlbums.length} photos from albums`]);
         }
       } catch (e) {
-        setDebug(prev => [...prev, `Error fetching albums (might not be implemented): ${(e as Error).message}`]);
+        const error = e as Error;
+        setDebug(prev => [...prev, `Error fetching albums (might not be implemented): ${error.message}`]);
       }
 
       const profilePhotos: Photo[] = [];
@@ -472,11 +559,22 @@ const ProfilePage: React.FC = () => {
     try {
       await makeApiRequest(`/users/${friendId}/follow`, 'post');
       setDebug(prev => [...prev, `Successfully followed user ${friendId}`]);
+      
+      // Update friends list if the user is in it
       setFriends(prevFriends =>
         prevFriends.map(friend =>
           friend._id === friendId
             ? { ...friend, isFollowing: true }
             : friend
+        )
+      );
+      
+      // Also update suggestions list if the user is in it
+      setSuggestions(prevSuggestions =>
+        prevSuggestions.map(suggestion =>
+          suggestion._id === friendId
+            ? { ...suggestion, isFollowing: true }
+            : suggestion
         )
       );
     } catch (error: unknown) {
@@ -492,11 +590,22 @@ const ProfilePage: React.FC = () => {
     try {
       await makeApiRequest(`/users/${friendId}/unfollow`, 'post');
       setDebug(prev => [...prev, `Successfully unfollowed user ${friendId}`]);
+      
+      // Update friends list if the user is in it
       setFriends(prevFriends =>
         prevFriends.map(friend =>
           friend._id === friendId
             ? { ...friend, isFollowing: false }
             : friend
+        )
+      );
+      
+      // Also update suggestions list if the user is in it
+      setSuggestions(prevSuggestions =>
+        prevSuggestions.map(suggestion =>
+          suggestion._id === friendId
+            ? { ...suggestion, isFollowing: false }
+            : suggestion
         )
       );
     } catch (error: unknown) {
@@ -625,7 +734,7 @@ const ProfilePage: React.FC = () => {
         const currentFollowers = prevProfile.followers || [];
         let updatedFollowers: string[];
         if (isCurrentlyFollowing) {
-            updatedFollowers = currentFollowers.filter(followerId => String(followerId) !== currentUser._id);
+            updatedFollowers = currentFollowers.filter((followerId: string) => String(followerId) !== currentUser._id);
         } else {
             updatedFollowers = [...new Set([...currentFollowers, currentUser._id])];
         }
@@ -641,12 +750,60 @@ const ProfilePage: React.FC = () => {
     }
   }, [isAuthenticated, id, profile, currentUser, isFollowing, makeApiRequest]);
 
-  // Process friends data when tab changes
-  useEffect(() => {
-    if (tabValue === 2 && profile && !friendsInitialized && !loadingFriends) { // Ensure profile is loaded
-      fetchFriends();
+  // Handle opening the photo upload dialog
+  const handleOpenPhotoUpload = useCallback(() => {
+    setPhotoUploadOpen(true);
+    setUploadSuccess(false);
+  }, []);
+
+  // Handle closing the photo upload dialog
+  const handleClosePhotoUpload = useCallback(() => {
+    setPhotoUploadOpen(false);
+    
+    // If upload was successful, refresh the photos
+    if (uploadSuccess) {
+      setPhotosInitialized(false);
+      fetchPhotos();
     }
-  }, [tabValue, profile, fetchFriends, loadingFriends, friendsInitialized]);
+  }, [uploadSuccess, fetchPhotos]);
+
+// Handle successful upload
+  const handleUploadSuccess = useCallback(() => {
+    setUploadSuccess(true);
+    setDebug(prev => [...prev, 'Photo upload successful']);
+  
+    // Automatically close the dialog after a short delay
+    setTimeout(() => {
+      setPhotoUploadOpen(false);
+      setPhotosInitialized(false); // Reset photos to trigger a refresh
+      fetchPhotos(); // Refresh photos
+    }, 1500); // 1.5 second delay to show the success message
+  }, [fetchPhotos]);
+
+  // Process friends and suggestions data when tab changes
+  useEffect(() => {
+    if (tabValue === 2 && profile) {
+      if (!friendsInitialized && !loadingFriends) {
+        fetchFriends();
+      }
+      
+      // Fetch suggestions only for own profile
+      if (isOwnProfile && currentUser && suggestions.length === 0 && !loadingSuggestions) {
+        fetchSuggestions();
+      }
+    }
+  }, [
+    tabValue, 
+    profile, 
+    fetchFriends, 
+    loadingFriends, 
+    friendsInitialized, 
+    isOwnProfile, 
+    currentUser, 
+    suggestions.length, 
+    loadingSuggestions, 
+    fetchSuggestions
+  ]);
 
   // Process photos data when tab changes
   useEffect(() => {
@@ -737,7 +894,7 @@ const ProfilePage: React.FC = () => {
             });
 
             if (currentUser && profileDataResult.followers && Array.isArray(profileDataResult.followers)) {
-                const isCurrentlyFollowing = profileDataResult.followers.some(followerId => String(followerId) === currentUser._id);
+                const isCurrentlyFollowing = profileDataResult.followers.some((followerId: string) => String(followerId) === currentUser._id);
                 setIsFollowing(isCurrentlyFollowing);
                 setDebug(prev => [...prev, `Set following status from followers array: ${isCurrentlyFollowing}`]);
             }
@@ -771,7 +928,7 @@ const ProfilePage: React.FC = () => {
     };
 
     fetchProfileData();
-  }, [id, currentUser, router.isReady, makeApiRequest]); // Removed router from deps, added router.isReady
+  }, [id, currentUser, router.isReady, makeApiRequest, userPostsData.length]); // Removed router from deps, added router.isReady
 
   // Conditional Renders for loading/error states
   if (loading) { // General page loading
@@ -802,7 +959,6 @@ const ProfilePage: React.FC = () => {
   // Derived variables for rendering (safe to call now as profile is guaranteed)
   const profileAvatarUrl = getFullImageUrl(profile.profilePicture, 'profile');
   const coverPhotoUrl = getFullImageUrl(profile.coverPhoto, 'cover');
-  // console.log(`[coverPhotoUrl] =  ${coverPhotoUrl}`);
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -984,36 +1140,209 @@ const ProfilePage: React.FC = () => {
 
       {/* Friends Tab */}
       <Box sx={{ display: tabValue === 2 ? 'block' : 'none' }}>
-        <Paper sx={{ p: 4, borderRadius: 2 }}>
+        {/* Current Friends Section */}
+        <Paper sx={{ p: 4, borderRadius: 2, mb: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h5">Friends</Typography>
-            {isOwnProfile && (<Button variant="outlined" startIcon={<PersonAddIcon />} onClick={() => router.push('/friends/find')}>Find Friends</Button>)}
+            {/* {isOwnProfile && (<Button variant="outlined" startIcon={<PersonAddIcon />} onClick={() => router.push('/friends/find')}>Find More Friends</Button>)} */}
           </Box>
           {friendsError && (<Alert severity="error" sx={{ mb: 3 }}>{friendsError}</Alert>)}
-          {loadingFriends ? (<Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+          {loadingFriends ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
           ) : friendsInitialized && friends.length > 0 ? (
             <Grid container spacing={2}>
               {friends.map((friend) => (
-                <Grid size={{xs:12,sm:6,md:4,lg:3}} key={friend._id}> {/* Changed Grid size prop to item and xs,sm,md,lg props */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', transition: 'transform 0.2s, box-shadow 0.2s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 3 } }}>
-                    <Avatar src={getFullImageUrl(friend.profilePicture, 'profile')} alt={friend.username} sx={{ width: 80, height: 80, mb: 1, cursor: 'pointer' }} onClick={() => router.push(`/profile/${friend._id}`)}/>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', textAlign: 'center', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }} onClick={() => router.push(`/profile/${friend._id}`)}>{friend.firstName} {friend.lastName}</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: 'center' }}>@{friend.username}</Typography>
+                <Grid size={{xs:12,sm:6,md:4,lg:3}} key={friend._id}>
+                  <Paper 
+                    variant="outlined" 
+                    sx={{ 
+                      p: 2, 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center',
+                      height: '100%', 
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: 3
+                      }
+                    }}
+                  >
+                    <Avatar 
+                      src={getFullImageUrl(friend.profilePicture, 'profile')} 
+                      alt={friend.username}
+                      sx={{ width: 80, height: 80, mb: 1 }}
+                      onClick={() => router.push(`/profile/${friend._id}`)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <Typography 
+                      variant="subtitle1" 
+                      sx={{ 
+                        fontWeight: 'bold', 
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        '&:hover': { textDecoration: 'underline' }
+                      }}
+                      onClick={() => router.push(`/profile/${friend._id}`)}
+                    >
+                      {friend.firstName} {friend.lastName}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: 'center' }}>
+                      @{friend.username}
+                    </Typography>
+                    
                     {isAuthenticated && currentUser?._id !== friend._id && (
-                      <Button variant={friend.isFollowing ? "outlined" : "contained"} size="small" startIcon={<PersonAddIcon />} fullWidth onClick={() => friend.isFollowing ? handleUnfollowFriend(friend._id) : handleFollowFriend(friend._id)}>{friend.isFollowing ? 'Unfollow' : 'Follow'}</Button>
+                      <Button 
+                        variant={friend.isFollowing ? "outlined" : "contained"} 
+                        size="small" 
+                        startIcon={<PersonAddIcon />}
+                        fullWidth
+                        onClick={() => friend.isFollowing ? handleUnfollowFriend(friend._id) : handleFollowFriend(friend._id)}
+                      >
+                        {friend.isFollowing ? 'Unfollow' : 'Follow'}
+                      </Button>
                     )}
                   </Paper>
                 </Grid>
               ))}
             </Grid>
           ) : friendsInitialized ? (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 6, textAlign: 'center', bgcolor: 'background.default', borderRadius: 1 }}>
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              py: 6, 
+              textAlign: 'center',
+              bgcolor: 'background.default',
+              borderRadius: 1
+            }}>
               <PersonIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary">{isOwnProfile ? 'You have no friends yet' : `${profile.firstName} has no friends yet`}</Typography>
-              {isOwnProfile && (<Button variant="contained" startIcon={<PersonAddIcon />} sx={{ mt: 2 }} onClick={() => router.push('/friends/find')}>Find Friends</Button>)}
+              <Typography variant="h6" color="text.secondary">
+                {isOwnProfile ? 'You have no friends yet' : `${profile.firstName} has no friends yet`}
+              </Typography>
+              {isOwnProfile && (
+                <Button 
+                  variant="contained" 
+                  startIcon={<PersonAddIcon />} 
+                  sx={{ mt: 2 }}
+                  onClick={() => router.push('/friends/find')}
+                >
+                  Find Friends
+                </Button>
+              )}
             </Box>
-          ) : (<Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>)}
+          ) : (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+          )}
         </Paper>
+
+        {/* Friend Suggestions Section - Only show for own profile */}
+        {isOwnProfile && (
+          <Paper sx={{ p: 4, borderRadius: 2 }}>
+            <Typography variant="h5" sx={{ mb: 3 }}>People You May Know</Typography>
+            
+            {suggestionsError && (<Alert severity="error" sx={{ mb: 3 }}>{suggestionsError}</Alert>)}
+            
+            {loadingSuggestions ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+            ) : suggestions.length > 0 ? (
+              <Grid container spacing={2}>
+                {suggestions.map((suggestion) => (
+                  <Grid size={{xs:12,sm:6,md:4,lg:3}} key={suggestion._id}>
+                    <Paper 
+                      variant="outlined" 
+                      sx={{ 
+                        p: 2, 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center',
+                        height: '100%', 
+                        transition: 'transform 0.2s, box-shadow 0.2s',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: 3
+                        }
+                      }}
+                    >
+                      <Avatar 
+                        src={getFullImageUrl(suggestion.profilePicture, 'profile')} 
+                        alt={suggestion.username}
+                        sx={{ width: 80, height: 80, mb: 1 }}
+                        onClick={() => router.push(`/profile/${suggestion._id}`)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <Typography 
+                        variant="subtitle1" 
+                        sx={{ 
+                          fontWeight: 'bold', 
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          '&:hover': { textDecoration: 'underline' }
+                        }}
+                        onClick={() => router.push(`/profile/${suggestion._id}`)}
+                      >
+                        {suggestion.firstName} {suggestion.lastName}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+                        @{suggestion.username}
+                      </Typography>
+                      
+                      {suggestion.mutualFriendsCount && suggestion.mutualFriendsCount > 0 && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: 'center' }}>
+                          {suggestion.mutualFriendsCount} mutual friend{suggestion.mutualFriendsCount !== 1 ? 's' : ''}
+                        </Typography>
+                      )}
+                      
+                      <Box sx={{ mt: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <Button 
+                          variant={suggestion.isRequested ? "outlined" : "contained"} 
+                          size="small" 
+                          startIcon={<PersonAddIcon />}
+                          fullWidth
+                          disabled={suggestion.isRequested}
+                          onClick={() => !suggestion.isRequested && handleSendFriendRequest(suggestion._id)}
+                        >
+                          {suggestion.isRequested ? 'Request Sent' : 'Add Friend'}
+                        </Button>
+                        
+                        <Button 
+                          variant={suggestion.isFollowing ? "outlined" : "text"} 
+                          size="small"
+                          fullWidth
+                          onClick={() => suggestion.isFollowing ? 
+                            handleUnfollowFriend(suggestion._id) : 
+                            handleFollowFriend(suggestion._id)}
+                        >
+                          {suggestion.isFollowing ? 'Unfollow' : 'Follow'}
+                        </Button>
+                      </Box>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+            ) : (
+              <Box sx={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                py: 6, 
+                textAlign: 'center',
+                bgcolor: 'background.default',
+                borderRadius: 1
+              }}>
+                <PersonIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+                <Typography variant="h6" color="text.secondary">
+                  No suggestions available right now
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  We&apos;ll show you people you might know once you start connecting with others.
+                </Typography>
+              </Box>
+            )}
+          </Paper>
+        )}
       </Box>
 
       {/* Photos Tab */}
@@ -1021,27 +1350,151 @@ const ProfilePage: React.FC = () => {
         <Paper sx={{ p: 4, borderRadius: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h5">Photos</Typography>
-            {isOwnProfile && (<Button variant="outlined" startIcon={<ImageIcon />} onClick={() => router.push('/photos/upload')}>Upload Photos</Button>)}
+            {isOwnProfile && (
+              <Button 
+                variant="outlined" 
+                startIcon={<ImageIcon />} 
+                onClick={handleOpenPhotoUpload}
+              >
+                Upload Photos
+              </Button>
+            )}
           </Box>
+          
+          {uploadSuccess && (
+            <Alert severity="success" sx={{ mb: 3 }}>
+              Photo uploaded successfully!
+            </Alert>
+          )}
+          
           {photosError && (<Alert severity="error" sx={{ mb: 3 }}>{photosError}</Alert>)}
-          {loadingPhotos ? (<Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+          
+          {loadingPhotos ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
           ) : photosData.length > 0 ? (
             <ImageList variant="masonry" cols={getGridCols()} gap={8}>
               {photosData.map((photo) => (
-                <ImageListItem key={photo._id} onClick={() => handlePhotoClick(photo)} sx={{ cursor: 'pointer', '&:hover': { opacity: 0.9, transform: 'scale(1.02)', transition: 'all 0.2s ease-in-out' } }}>
-                  <img src={photo.url} alt={photo.caption || 'Photo'} loading="lazy" style={{ borderRadius: 8, display: 'block', width: '100%', height: 'auto' }} onError={(e) => { console.error(`Failed to load image: ${photo.url}`); (e.target as HTMLImageElement).src = '/images/placeholder-image.png'; /* Ensure placeholder exists */ }}/>
-                  <ImageListItemBar title={photo.caption} subtitle={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Box sx={{ display: 'flex', alignItems: 'center' }}><LikeIcon fontSize="small" sx={{ mr: 0.5 }} />{photo.likes || 0}</Box><Box sx={{ display: 'flex', alignItems: 'center' }}><CommentIcon fontSize="small" sx={{ mr: 0.5 }} />{photo.comments || 0}</Box></Box>} sx={{ borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }}/>
+                <ImageListItem 
+                  key={photo._id} 
+                  onClick={() => handlePhotoClick(photo)} 
+                  sx={{ 
+                    cursor: 'pointer', 
+                    '&:hover': { 
+                      opacity: 0.9, 
+                      transform: 'scale(1.02)', 
+                      transition: 'all 0.2s ease-in-out' 
+                    } 
+                  }}
+                >
+                  <img 
+                    src={photo.url} 
+                    alt={photo.caption || 'Photo'} 
+                    loading="lazy" 
+                    style={{ 
+                      borderRadius: 8, 
+                      display: 'block', 
+                      width: '100%', 
+                      height: 'auto' 
+                    }} 
+                    onError={(e) => { 
+                      console.error(`Failed to load image: ${photo.url}`); 
+                      (e.target as HTMLImageElement).src = '/images/placeholder-image.png';
+                    }}
+                  />
+                  <ImageListItemBar 
+                    title={photo.caption} 
+                    subtitle={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <LikeIcon fontSize="small" sx={{ mr: 0.5 }} />
+                          {photo.likes || 0}
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <CommentIcon fontSize="small" sx={{ mr: 0.5 }} />
+                          {photo.comments || 0}
+                        </Box>
+                      </Box>
+                    } 
+                    sx={{ borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }}
+                  />
                 </ImageListItem>
               ))}
             </ImageList>
           ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 6, textAlign: 'center', bgcolor: 'background.default', borderRadius: 1 }}>
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              py: 6, 
+              textAlign: 'center', 
+              bgcolor: 'background.default', 
+              borderRadius: 1 
+            }}>
               <ImageIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary">{isOwnProfile ? 'You have no photos yet' : `${profile.firstName} has no photos to display`}</Typography>
-              {isOwnProfile && (<Button variant="contained" startIcon={<ImageIcon />} sx={{ mt: 2 }} onClick={() => router.push('/photos/upload')}>Upload Photos</Button>)}
+              <Typography variant="h6" color="text.secondary">
+                {isOwnProfile ? 'You have no photos yet' : `${profile.firstName} has no photos to display`}
+              </Typography>
+              {isOwnProfile && (
+                <Button 
+                  variant="contained" 
+                  startIcon={<ImageIcon />} 
+                  sx={{ mt: 2 }} 
+                  onClick={handleOpenPhotoUpload}
+                >
+                  Upload Photos
+                </Button>
+              )}
             </Box>
           )}
         </Paper>
+        
+        {/* Photo Upload Dialog */}
+        <Dialog 
+          open={photoUploadOpen} 
+          onClose={handleClosePhotoUpload}
+          fullWidth
+          maxWidth="md"
+        >
+          <DialogTitle>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="h6">Upload Photos</Typography>
+              <IconButton edge="end" color="inherit" onClick={handleClosePhotoUpload} aria-label="close">
+                <CloseIcon />
+              </IconButton>
+            </Box>
+          </DialogTitle>
+          <DialogContent dividers>
+            {uploadSuccess && (
+              <Alert severity="success" sx={{ mb: 2 }}>
+                Photo uploaded successfully!
+              </Alert>
+            )}
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body1" gutterBottom>
+                Share photos with your friends and followers
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Add a caption to describe your photo.
+              </Typography>
+            </Box>
+            
+            <PostForm 
+              initialMode="photo"
+              disableTextOnly={true}
+              onSubmitSuccess={handleUploadSuccess}
+              customSubmitButtonText="Upload Photo"
+              dialogMode={true}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleClosePhotoUpload} color="primary">
+              {uploadSuccess ? 'Done' : 'Cancel'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
 
       {process.env.NODE_ENV !== 'production' && ( <Paper sx={{ p: 2, mt: 3, maxHeight: 200, overflow: 'auto', fontSize: '0.7rem' }}> <Typography variant="subtitle2">Debug Info:</Typography> {debug.map((msg, i) => (<Typography key={i} variant="caption" display="block">{msg}</Typography>))} </Paper> )}
