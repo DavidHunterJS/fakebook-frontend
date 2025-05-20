@@ -17,7 +17,7 @@ import { PhotoCamera, Save as SaveIcon } from '@mui/icons-material';
 import useAuth from '../../hooks/useAuth'; // Adjust path as needed
 import api from '../../utils/api'; // Your configured axios instance
 import { getFullImageUrl } from '../../utils/imgUrl';
-
+import axios from 'axios';
 // Define a type for API errors
 interface ApiError {
   response?: {
@@ -29,6 +29,10 @@ interface ApiError {
     [key: string]: unknown;
   };
   message?: string;
+  config?: {
+    headers?: Record<string, string>;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -197,43 +201,58 @@ const EditProfilePage: FC = () => {
     setSuccessMessage(null);
 
     const uploadFormData = new FormData();
-    uploadFormData.append(type, file, file.name);
+    uploadFormData.append(type, file);
 
     console.log(`[EditProfilePage] handleUploadImage - FormData to be sent for type "${type}":`);
-    for (const [key, value] of uploadFormData.entries()) {
-      console.log(`  FormData Entry - ${key}:`, value);
+    for (const pair of uploadFormData.entries()) {
+      console.log(`  FormData Entry - ${pair[0]}:`, pair[1]);
     }
 
     const endpoint = type === 'profilePicture' ? '/users/profile/picture' : '/users/profile/cover';
 
     try {
-      const res = await api.post(endpoint, uploadFormData, {
+      console.log(`[EditProfilePage] Making ${type} upload request to: ${endpoint}`);
+      
+      // Create a custom axios instance for this request only
+      // This prevents the default Content-Type from being applied
+      const res = await axios.post(`${api.defaults.baseURL}${endpoint}`, uploadFormData, {
         headers: {
           Authorization: `Bearer ${token}`,
-          // No need to set Content-Type for FormData - browser will set it with boundary
-          // 'Content-Type': 'multipart/form-data', 
+          // EXPLICITLY set Content-Type to undefined so browser sets it automatically
+          'Content-Type': undefined  
         },
       });
 
-      console.log(`[EditProfilePage] handleUploadImage - Response for ${type}:`, res.data);
+      console.log(`[EditProfilePage] handleUploadImage - Success! Response for ${type}:`, res.data);
 
       if (type === 'profilePicture') {
         if (res.data.profilePicture) {
-            updateUserInContext({ profilePicture: res.data.profilePicture });
+          updateUserInContext({ profilePicture: res.data.profilePicture });
         }
         setProfilePicturePreview(res.data.profilePictureUrl || getFullImageUrl(res.data.profilePicture, 'profile'));
         setProfilePictureFile(null);
       } else if (type === 'coverPhoto') {
         if (res.data.coverPhoto) {
-            updateUserInContext({ coverPhoto: res.data.coverPhoto });
+          updateUserInContext({ coverPhoto: res.data.coverPhoto });
         }
-        setCoverPhotoPreview(res.data.coverPhotoUrl || getFullImageUrl(res.data.coverPhoto, 'cover')); // Type is 'cover'
+        setCoverPhotoPreview(res.data.coverPhotoUrl || getFullImageUrl(res.data.coverPhoto, 'cover'));
         setCoverPhotoFile(null);
       }
       setSuccessMessage(`${type === 'profilePicture' ? 'Profile picture' : 'Cover photo'} updated successfully!`);
     } catch (err: unknown) {
       const error = err as ApiError;
       console.error(`[EditProfilePage] handleUploadImage - Error during API call for type "${type}":`, err);
+      
+      // Enhanced error logging
+      if (error.response) {
+        console.error(`Response status: ${error.response.status}`);
+        console.error('Response data:', error.response.data);
+        
+        if (error.config) {
+          console.error('Request headers:', error.config.headers);
+        }
+      }
+      
       setError(error.response?.data?.message || error.message || `Failed to upload ${type}.`);
     } finally {
       setLoadingState(false);
