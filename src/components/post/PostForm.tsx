@@ -9,6 +9,7 @@ import useAuth from '../../hooks/useAuth';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getFullImageUrl } from '../../utils/imgUrl';
 
+const defaultAvatarFilename = 'default-avatar.png'
 // Add props interface
 interface PostFormProps {
   initialMode?: 'text' | 'photo';
@@ -130,7 +131,7 @@ const PostForm: React.FC<PostFormProps> = ({
   };
 
   // Get the correct avatar URL
-  const avatarUrl = user ? getFullImageUrl(user.profilePicture, 'profile') : getFullImageUrl();
+  const avatarUrl = user ? getFullImageUrl(user.profilePicture, 'profile') : getFullImageUrl(defaultAvatarFilename, 'profile');
 
   // Check if submit should be disabled
   const isSubmitDisabled = () => {
