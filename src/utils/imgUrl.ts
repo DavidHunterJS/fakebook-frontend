@@ -14,11 +14,11 @@ const S3_BUCKET_URL = `https://trippy.wtf.s3.us-east-1.amazonaws.com`;
 // Example: const S3_BUCKET_URL = `https://trippy.wtf.s3.us-east-1.amazonaws.com`;
 
 // S3 folder paths if you use them. If your keys already include these, adjust logic.
-const S3_TYPE_TO_FOLDER_MAP: Record<ImageType, string> = {
-  profile: 'profile',
-  cover: 'covers',
-  post: 'posts',
-};
+// const S3_TYPE_TO_FOLDER_MAP: Record<ImageType, string> = {
+//   profile: 'profile',
+//   cover: 'covers',
+//   post: 'posts',
+// };
 
 // LOCAL Next.js public paths for default images
 const DEFAULT_IMAGE_PATHS: Record<ImageType, string> = {
