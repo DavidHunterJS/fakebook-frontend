@@ -1,138 +1,101 @@
-// Helper to construct full image URLs
+// src/utils/imgUrl.ts
 
-// Define image types as a union type
 type ImageType = 'profile' | 'cover' | 'post';
 
-// Define media item interface to match your backend schema
 interface MediaItem {
-  url: string;
-  key: string;
-  type: string;
-  originalFilename?: string;
+  url?: string;
+  key?: string;
 }
 
-// Define possible input types
 type ImageInput = string | MediaItem | null | undefined;
 
-// Define a mapping of image types to their folder paths
-const TYPE_TO_FOLDER_MAP: Record<ImageType, string> = {
+// IMPORTANT: Configure this with your actual S3 bucket URL structure
+const S3_BUCKET_URL = `https://trippy.wtf.s3.us-east-1.amazonaws.com`;
+// Example: const S3_BUCKET_URL = `https://trippy.wtf.s3.us-east-1.amazonaws.com`;
+
+// S3 folder paths if you use them. If your keys already include these, adjust logic.
+const S3_TYPE_TO_FOLDER_MAP: Record<ImageType, string> = {
   profile: 'profile',
-  cover: 'covers', // IMPORTANT: Using 'covers' (plural)
-  post: 'posts'
+  cover: 'covers',
+  post: 'posts',
 };
 
-// Define a mapping of image types to their default image paths
-const DEFAULT_IMAGE_MAP: Record<ImageType, string> = {
-  profile: '/images/default-avatar.png',
-  cover: '/images/default-cover.png',
-  post: '/images/default-post-placeholder.png'
+// LOCAL Next.js public paths for default images
+const DEFAULT_IMAGE_PATHS: Record<ImageType, string> = {
+  profile: '/images/default-avatar.png', // Must exist at public/images/default-avatar.png
+  cover: '/images/default-cover.png',   // Must exist at public/images/default-cover.png
+  post: '/images/default-post-placeholder.png', // Must exist at public/images/default-post-placeholder.png
 };
 
-// Define default names that should be mapped to default images
-const DEFAULT_FILENAMES = new Set(['default-avatar.png', 'default-cover.png']);
+// Filenames that signify a local default image should be used
+const DEFAULT_PLACEHOLDER_FILENAMES = new Set([
+  'default-avatar.png',
+  'default-cover.png',
+  'default.png',
+]);
 
-// Backend static URL from environment - use hardcoded Heroku URL as fallback for reliability
-const BACKEND_STATIC_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://fakebook-backend-a2a77a290552.herokuapp.com';
+// Your backend URL (only used if absolutely necessary, e.g. for localhost replacement or true backend static assets)
+const HEROKU_BACKEND_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://fakebook-backend-a2a77a290552.herokuapp.com';
 
-// Production backend URL for replacing localhost references
-const PRODUCTION_BACKEND_URL = 'https://fakebook-backend-a2a77a290552.herokuapp.com';
-
-/**
- * Processes a URL string to ensure it's properly formatted
- * 
- * @param urlString - The URL string to process
- * @param type - The type of image (profile, cover, or post)
- * @returns The processed URL string
- */
-const processUrlString = (urlString: string, type: ImageType): string => {
-  const trimmedInput = urlString.trim();
-
-  // Check for localhost and replace only in production
-  if (trimmedInput.startsWith('http://localhost:5000/')) {
-    if (process.env.NODE_ENV === 'production') {
-      const fixedUrl = trimmedInput.replace('http://localhost:5000', PRODUCTION_BACKEND_URL);
-      console.log(`[getFullImageUrl] Replacing localhost URL: "${trimmedInput}" → "${fixedUrl}"`);
-      return fixedUrl;
-    }
-    return trimmedInput; // In development, keep localhost URL
-  }
-
-  if (trimmedInput.startsWith('http://') || trimmedInput.startsWith('https://')) {
-    return trimmedInput;
-  }
-
-  if (DEFAULT_FILENAMES.has(trimmedInput)) {
-    return DEFAULT_IMAGE_MAP[type === 'profile' ? 'profile' : 'cover'];
-  }
-
-  const folderPath = TYPE_TO_FOLDER_MAP[type];
-  const cacheBuster = `t=${Date.now()}`;
-  const fullUrl = `${BACKEND_STATIC_URL}/uploads/${folderPath}/${trimmedInput}?${cacheBuster}`;
-
-  console.log(`[getFullImageUrl] Type: "${type}", FolderPath: "${folderPath}", Final URL: "${fullUrl}"`);
-  return fullUrl;
-};
-
-/**
- * Generates a full URL for an image based on its type and filename or MediaItem
- * 
- * @param input - The filename, URL, or MediaItem object
- * @param type - The type of image (profile, cover, or post)
- * @returns The full URL of the image
- */
 export const getFullImageUrl = (input: ImageInput, type: ImageType = 'profile'): string => {
-  // Handle null or undefined input
-  if (!input) {
-    return DEFAULT_IMAGE_MAP[type];
+  // 1. Handle null, undefined, or empty string input by returning the local default path
+  if (!input || (typeof input === 'string' && input.trim() === '')) {
+    // console.log(`[getFullImageUrl] Input is empty. Returning default for type: ${type}`);
+    return DEFAULT_IMAGE_PATHS[type];
   }
 
-  // Handle MediaItem object
-  if (typeof input === 'object') {
-    // If the object has a url property, use that
-    if ('url' in input && typeof input.url === 'string') {
-      return processUrlString(input.url, type);
+  // 2. Handle MediaItem object input
+  if (typeof input === 'object' && input !== null) {
+    if (input.url && (input.url.startsWith('http://') || input.url.startsWith('https://'))) {
+      // console.log(`[getFullImageUrl] Input is MediaItem with full URL: ${input.url}`);
+      return input.url; // Already a full URL (likely S3 or from backend if it serves some)
     }
-    
-    // If the object has a key property but no url, generate URL from key
-    if ('key' in input && typeof input.key === 'string') {
-      // Extract the filename from the key (e.g., "posts/filename.jpg" → "filename.jpg")
-      const parts = input.key.split('/');
-      const filename = parts[parts.length - 1];
-      
-      // Use the folder from the key if possible
-      let folderType = type;
-      if (input.key.startsWith('profile/')) folderType = 'profile';
-      else if (input.key.startsWith('covers/')) folderType = 'cover';
-      else if (input.key.startsWith('posts/')) folderType = 'post';
-      
-      return processUrlString(filename, folderType);
+    if (input.key) {
+      const s3Key = input.key; // Assume key from MediaItem is the full S3 key including folder
+      const s3Url = `${S3_BUCKET_URL}/${s3Key}`;
+      // console.log(`[getFullImageUrl] Input is MediaItem with key "${input.key}". Constructed S3 URL: ${s3Url}`);
+      return s3Url;
     }
-    
-    // If we couldn't extract a URL, return the default
-    return DEFAULT_IMAGE_MAP[type];
+    // console.log(`[getFullImageUrl] Input is MediaItem but no URL/key. Returning default for type: ${type}`);
+    return DEFAULT_IMAGE_PATHS[type];
   }
 
-  // Handle string input
-  return processUrlString(input, type);
+  // 3. Handle string input
+  if (typeof input === 'string') {
+    const trimmedInput = input.trim();
+
+    // If it's already a full URL
+    if (trimmedInput.startsWith('http://') || trimmedInput.startsWith('https://')) {
+      // Replace localhost backend URLs if in production and image is accidentally pointing there
+      if (trimmedInput.startsWith('http://localhost:5000') && process.env.NODE_ENV === 'production') {
+        const fixedUrl = trimmedInput.replace('http://localhost:5000', HEROKU_BACKEND_URL);
+        // console.log(`[getFullImageUrl] Input is localhost URL, replaced for prod: ${fixedUrl}`);
+        return fixedUrl;
+      }
+      // console.log(`[getFullImageUrl] Input is already a full URL: ${trimmedInput}`);
+      return trimmedInput;
+    }
+
+    // If it's one of the known placeholder filenames indicating a local default is needed
+    if (DEFAULT_PLACEHOLDER_FILENAMES.has(trimmedInput)) {
+      // console.log(`[getFullImageUrl] Input string "${trimmedInput}" is a default placeholder. Returning default for type: ${type}`);
+      return DEFAULT_IMAGE_PATHS[type];
+    }
+
+    // Otherwise, assume it's an S3 key.
+    // The key stored in DB (e.g., user.profilePicture) should be the full S3 key path like "profile/filename.jpg"
+    const s3Key = trimmedInput; // Assumes trimmedInput is the S3 key (e.g., "profile/image.jpg")
+    const s3Url = `${S3_BUCKET_URL}/${s3Key}`;
+    // console.log(`[getFullImageUrl] Input string "${trimmedInput}" assumed S3 key. Constructed S3 URL: ${s3Url}`);
+    return s3Url;
+  }
+
+  // Fallback for unexpected input
+  // console.warn(`[getFullImageUrl] Unexpected input type. Returning default for type: ${type}`);
+  return DEFAULT_IMAGE_PATHS[type];
 };
 
-/**
- * Convenience function for getting a profile image URL
- */
-export const getProfileImageUrl = (input: ImageInput): string => {
-  return getFullImageUrl(input, 'profile');
-};
-
-/**
- * Convenience function for getting a cover image URL
- */
-export const getCoverImageUrl = (input: ImageInput): string => {
-  return getFullImageUrl(input, 'cover');
-};
-
-/**
- * Convenience function for getting a post image URL
- */
-export const getPostImageUrl = (input: ImageInput): string => {
-  return getFullImageUrl(input, 'post');
-};
+// Convenience functions
+export const getProfileImageUrl = (input: ImageInput): string => getFullImageUrl(input, 'profile');
+export const getCoverImageUrl = (input: ImageInput): string => getFullImageUrl(input, 'cover');
+export const getPostImageUrl = (input: ImageInput): string => getFullImageUrl(input, 'post');

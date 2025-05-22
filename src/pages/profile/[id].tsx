@@ -630,7 +630,7 @@ const ProfilePage: React.FC = () => {
       setIsEditingBio(false);
     } catch (error: unknown) {
       const err = error as ApiError;
-      console.error('Error updating bio:', err);
+      console.error('Error updating bio:', );
       setBioError(err.response?.data?.message || err.message || 'Failed to update bio.');
       setDebug(prev => [...prev, `Error updating bio: ${err.response?.data?.message || err.message || 'Failed to update bio.'}`]);
     } finally {
@@ -972,6 +972,7 @@ const ProfilePage: React.FC = () => {
               style={{ objectFit: 'cover', objectPosition: 'center' }}
               priority // Consider adding priority for LCP elements
               onError={(e) => { console.error("Error loading cover image:", e); (e.target as HTMLImageElement).style.display = 'none';}}
+              // unoptimized={true}
             />
           )}
         </Box>

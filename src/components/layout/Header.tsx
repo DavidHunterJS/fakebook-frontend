@@ -32,31 +32,33 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import useAuth from '../../hooks/useAuth'; // Adjust path if needed
 
+import {getFullImageUrl} from '../../utils/imgUrl'
+
 // --- Helper to construct full image URLs ---
 // Ensure NEXT_PUBLIC_BACKEND_BASE_URL is set in your .env.local (e.g., http://localhost:5000)
 const BACKEND_STATIC_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
 
-const getFullImageUrl = (filenameOrUrl?: string, type: 'profile' | 'cover' = 'profile'): string => {
-  const defaultProfilePic = '/images/default-avatar.png';
+// const getFullImageUrl = (filenameOrUrl?: string, type: 'profile' | 'cover' = 'profile'): string => {
+//   const defaultProfilePic = '/images/default-avatar.png';
 
-  if (!filenameOrUrl) {
-      return defaultProfilePic;
-  }
-  const trimmedInput = filenameOrUrl.trim();
-  if (trimmedInput.startsWith('http://') || trimmedInput.startsWith('https://')) {
-      return trimmedInput;
-  }
-  if (trimmedInput === 'default-avatar.png') {
-      return defaultProfilePic;
-  }
+//   if (!filenameOrUrl) {
+//       return defaultProfilePic;
+//   }
+//   const trimmedInput = filenameOrUrl.trim();
+//   if (trimmedInput.startsWith('http://') || trimmedInput.startsWith('https://')) {
+//       return trimmedInput;
+//   }
+//   if (trimmedInput === 'default-avatar.png') {
+//       return defaultProfilePic;
+//   }
   
-  // Construct full URL to image served by the BACKEND
-  const pathSegment = type === 'cover' ? 'covers' : type;
+//   // Construct full URL to image served by the BACKEND
+//   const pathSegment = type === 'cover' ? 'covers' : type;
   
-  // Add cache busting parameter with timestamp
-  return `${BACKEND_STATIC_URL}/uploads/${pathSegment}/${trimmedInput}?t=${Date.now()}`;
-};
-// --- End Helper ---
+//   // Add cache busting parameter with timestamp
+//   return `${BACKEND_STATIC_URL}/uploads/${pathSegment}/${trimmedInput}?t=${Date.now()}`;
+// };
+// // --- End Helper ---
 
 
 const Search = styled('div')(({ theme }) => ({
