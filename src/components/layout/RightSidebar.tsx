@@ -16,6 +16,7 @@ import {
     Alert,
 } from '@mui/material';
 import AuthContext from '../../context/AuthContext'; // Adjust path if needed
+import {getFullImageUrl} from '../../utils/imgUrl';
 
 // --- Define Interfaces ---
 interface UserSuggestion {
@@ -56,24 +57,24 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/a
 // Ensure NEXT_PUBLIC_BACKEND_BASE_URL is set in your .env.local (e.g., http://localhost:5000)
 const BACKEND_STATIC_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
 
-const getFullImageUrl = (filenameOrUrl?: string, type: 'profile' | 'cover' = 'profile'): string => {
-    const defaultProfilePic = '/images/default-avatar.png'; // Path in frontend public/images
+// const getFullImageUrl = (filenameOrUrl?: string, type: 'profile' | 'cover' = 'profile'): string => {
+//     const defaultProfilePic = '/images/default-avatar.png'; // Path in frontend public/images
 
-    if (!filenameOrUrl) {
-        return defaultProfilePic; // Always return default for profile if no filename
-    }
-    const trimmedInput = filenameOrUrl.trim();
-    if (trimmedInput.startsWith('http://') || trimmedInput.startsWith('https://')) {
-        return trimmedInput; // Already a full URL
-    }
-    if (trimmedInput === 'default-avatar.png') {
-        return defaultProfilePic;
-    }
-    // Construct full URL to image served by the BACKEND
-    // Ensure pathSegment matches your backend static serving setup
-    const pathSegment = type === 'cover' ? 'covers' : type; // Use 'covers' for cover type
-    return `${BACKEND_STATIC_URL}/uploads/${pathSegment}/${trimmedInput}`;
-};
+//     if (!filenameOrUrl) {
+//         return defaultProfilePic; // Always return default for profile if no filename
+//     }
+//     const trimmedInput = filenameOrUrl.trim();
+//     if (trimmedInput.startsWith('http://') || trimmedInput.startsWith('https://')) {
+//         return trimmedInput; // Already a full URL
+//     }
+//     if (trimmedInput === 'default-avatar.png') {
+//         return defaultProfilePic;
+//     }
+//     // Construct full URL to image served by the BACKEND
+//     // Ensure pathSegment matches your backend static serving setup
+//     const pathSegment = type === 'cover' ? 'covers' : type; // Use 'covers' for cover type
+//     return `${BACKEND_STATIC_URL}/uploads/${pathSegment}/${trimmedInput}`;
+// };
 
 
 // --- Component ---
