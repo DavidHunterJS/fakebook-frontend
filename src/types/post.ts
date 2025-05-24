@@ -31,7 +31,7 @@ export interface PopulatedReply {
   updatedAt: string | Date;
 }
 
-export interface Comment {
+export interface Comment { // Exported as 'Comment' for CommentList.tsx
   _id: string;
   text: string;
   user: PopulatedUser | string; // User can be populated or just an ID
@@ -41,16 +41,16 @@ export interface Comment {
   updatedAt: string;
   replies?: PopulatedReply[]; // If replies are populated as well
   reported?: boolean;
-  reportReasons?: IReportReason[];
+  reportReasons?: IReportReason[]; // Now explicitly IReportReason[]
 }
 
 
 // --- Post Interfaces (Based on your backend model and controller output) ---
 
-export interface IReportReason {
-  user: User['_id'];
+export interface IReportReason { // Exported as 'IReportReason'
+  user: User['_id'] | string; // FIX: user can be an ObjectId or string ID
   reason: string;
-  date: Date;
+  date: Date | string; // FIX: date can be Date object or string
 }
 
 export interface IShare {
@@ -58,7 +58,6 @@ export interface IShare {
   date: Date;
 }
 
-// In your types/post.ts file
 export enum PostVisibility {
   PUBLIC = 'public',
   FRIENDS = 'friends',
@@ -67,27 +66,29 @@ export enum PostVisibility {
 
 export interface Post {
   _id: string;
-  user: PopulatedUser;
-  text: string;
-  media?: MediaItem[]; // <-- FIX: Changed from string[] to MediaItem[]
-  visibility: PostVisibility;
-  likes: string[];
-  comments: string[] | Comment[];
-  tags: PopulatedUser[];
-  reported: boolean;
-  reportReasons: IReportReason[];
-  createdAt: string;
-  updatedAt: string;
+  user: PopulatedUser; // Assumed populated by API
+  text: string; // Assumed required based on model, can be empty string
+  media?: MediaItem[]; // <-- Corrected to MediaItem[]
+  visibility: PostVisibility; // Use the enum
+  likes: string[]; // Array of user IDs who liked the post (unpopulated)
+  comments: string[] | Comment[]; // Array of comment IDs (unpopulated) OR Comment[] if populated
+  tags: PopulatedUser[]; // Assumed populated by API
+  reported: boolean; // Flag if the post is reported
+  reportReasons: IReportReason[]; // Array of report reason objects
+  createdAt: string; // ISO date string
+  updatedAt: string; // ISO date string
 
+  // Aggregated/calculated fields from backend
   likesCount: number;
   commentsCount: number;
-  isLiked: boolean;
-  isSaved: boolean;
+  isLiked: boolean; // Specific to the viewing user
+  isSaved: boolean; // Specific to the viewing user
 
+  // Optional fields from your Post model (if not always returned)
   pinned?: boolean;
-  originalPost?: string;
-  sharedFrom?: string;
-  shares?: IShare[];
+  originalPost?: string; // Assuming it's an ID string
+  sharedFrom?: string; // Assuming it's an ID string
+  shares?: IShare[]; // Array of share objects
 }
 
 export interface PostsResponse {
@@ -98,7 +99,3 @@ export interface PostsResponse {
       pages?: number;
   };
 }
-
-
-
-
