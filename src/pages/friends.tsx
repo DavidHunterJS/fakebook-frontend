@@ -85,7 +85,7 @@ interface ApiError {
 const FriendsPage: React.FC = () => {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
-  
+
   // State
   const [activeTab, setActiveTab] = useState<FriendTab>(FriendTab.FRIENDS);
   const [friends, setFriends] = useState<FriendUser[]>([]);
@@ -102,7 +102,7 @@ const FriendsPage: React.FC = () => {
     page: 1,
     pages: 1
   });
-  
+
   // Helper to handle API errors
   const handleApiError = useCallback((error: ApiError, fallbackMessage: string) => {
     console.error(error);
@@ -180,7 +180,7 @@ const FriendsPage: React.FC = () => {
   const loadTabData = useCallback(async (tab: FriendTab, page: number = 1) => {
     try {
       setLoading(true);
-      
+
       switch (tab) {
         case FriendTab.FRIENDS:
           await fetchFriends(page);
@@ -205,6 +205,34 @@ const FriendsPage: React.FC = () => {
     }
   }, [fetchFriends, fetchPendingRequests, fetchSentRequests, fetchSuggestions, fetchBlockedUsers, handleApiError]);
 
+  // --- NEW useEffect for URL Query Parameter ---
+  useEffect(() => {
+    if (router.isReady) {
+      const tabParam = router.query.tab as string; // Get the 'tab' query parameter
+      if (tabParam) {
+        switch (tabParam) {
+          case 'friends':
+            setActiveTab(FriendTab.FRIENDS);
+            break;
+          case 'requests':
+            setActiveTab(FriendTab.REQUESTS);
+            break;
+          case 'sent':
+            setActiveTab(FriendTab.SENT);
+            break;
+          case 'suggestions':
+            setActiveTab(FriendTab.SUGGESTIONS);
+            break;
+          case 'blocked':
+            setActiveTab(FriendTab.BLOCKED);
+            break;
+          default:
+            setActiveTab(FriendTab.FRIENDS); // Default if unrecognized
+        }
+      }
+    }
+  }, [router.isReady, router.query]); // Depend on router.isReady and router.query
+
   // Load data based on active tab
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -213,13 +241,13 @@ const FriendsPage: React.FC = () => {
     }
 
     if (!isAuthenticated) return;
-    
+
     setLoading(true);
     setError(null);
     setCurrentPage(1);
-    
+
     loadTabData(activeTab, 1);
-  }, [isAuthenticated, authLoading, activeTab, loadTabData, router]);
+  }, [isAuthenticated, authLoading, activeTab, loadTabData, router]); // `activeTab` is a dependency here
 
   // Action functions
   const handleSendFriendRequest = useCallback(async (userId: string) => {
@@ -301,6 +329,11 @@ const FriendsPage: React.FC = () => {
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue as FriendTab);
+    // Update the URL to reflect the currently selected tab
+    const tabName = Object.keys(FriendTab)[Object.values(FriendTab).indexOf(newValue as FriendTab)]?.toLowerCase();
+    if (tabName) {
+        router.push(`/friends?tab=${tabName}`, undefined, { shallow: true });
+    }
   };
 
   const handlePageChange = (event: React.ChangeEvent<unknown>, page: number) => {
@@ -337,17 +370,17 @@ const FriendsPage: React.FC = () => {
   // Helper function to get profile image URL
   const getProfileImage = useCallback((user: FriendUser): string => {
     if (!user) return '/images/default-avatar.png';
-    
+
     // Check if we have a profile picture value
     const profilePic = user.profilePicture || user.profileImage;
     console.log(`[profilePic] ${profilePic}`);
-    
+
     // If no profile picture, return default
     if (!profilePic || profilePic === 'default-avatar.png') {
       console.log(`User ${user.username}: Using default avatar`);
       return '/images/default-avatar.png';
     }
-    
+
     // Use the centralized getFullImageUrl function
     const imageUrl = getFullImageUrl(profilePic, 'profile');
     console.log(`User ${user.username}: Using getFullImageUrl: ${imageUrl}`);
@@ -371,8 +404,8 @@ const FriendsPage: React.FC = () => {
             <Grid size={{xs:12, sm:6, md:4}} key={friend._id}>
               <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
-                <Avatar 
-                  src={getProfileImage(friend)} 
+                <Avatar
+                  src={getProfileImage(friend)}
                   alt={getUserName(friend)}
                   sx={{ width: 60, height: 60, mr: 2 }}
                   onError={(e) => {
@@ -390,21 +423,21 @@ const FriendsPage: React.FC = () => {
                     </Typography>
                   </Box>
                 </Box>
-                
+
                 <CardContent sx={{ flexGrow: 1, pt: 0 }}>
                   <Typography variant="body2" color="text.secondary">
                     {friend.bio || 'No bio available'}
                   </Typography>
                 </CardContent>
-                
+
                 <CardActions>
                   <Button size="small" onClick={() => viewProfile(friend._id)}>
                     View Profile
                   </Button>
                   <Box sx={{ flexGrow: 1 }} />
                   <Tooltip title="Remove Friend">
-                    <IconButton 
-                      color="default" 
+                    <IconButton
+                      color="default"
                       onClick={() => handleRemoveFriend(friend._id)}
                       size="small"
                     >
@@ -412,8 +445,8 @@ const FriendsPage: React.FC = () => {
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Block User">
-                    <IconButton 
-                      color="default" 
+                    <IconButton
+                      color="default"
                       onClick={() => handleBlockUser(friend._id)}
                       size="small"
                     >
@@ -425,14 +458,14 @@ const FriendsPage: React.FC = () => {
             </Grid>
           ))}
         </Grid>
-        
+
         {pagination.pages > 1 && (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-            <Pagination 
-              count={pagination.pages} 
+            <Pagination
+              count={pagination.pages}
               page={currentPage}
               onChange={handlePageChange}
-              color="primary" 
+              color="primary"
             />
           </Box>
         )}
@@ -454,18 +487,18 @@ const FriendsPage: React.FC = () => {
         <Typography variant="h6" sx={{ mt: 2, mb: 2 }}>
           Friend Requests ({pagination.total})
         </Typography>
-        
+
         <Grid container spacing={2}>
           {pendingRequests.map((request) => {
             // Make sure requester is a FriendUser object
-            const requester = typeof request.requester === 'string' 
-              ? null 
+            const requester = typeof request.requester === 'string'
+              ? null
               : request.requester as FriendUser;
-              
+
             if (!requester) return null; // Skip if data is malformed
-              
+
             return (
-              <Grid 
+              <Grid
               size={{xs:12, sm:6, md:4}} key={request._id} // Required key for rendering lists in React
               >
                 <Paper sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
@@ -484,16 +517,16 @@ const FriendsPage: React.FC = () => {
                   </Box>
                   <Box>
                     <Tooltip title="Accept">
-                      <IconButton 
-                        color="success" 
+                      <IconButton
+                        color="success"
                         onClick={() => handleAcceptRequest(requester._id)}
                       >
                         <AcceptIcon />
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Decline">
-                      <IconButton 
-                        color="error" 
+                      <IconButton
+                        color="error"
                         onClick={() => handleDeclineRequest(requester._id)}
                       >
                         <DeclineIcon />
@@ -510,14 +543,14 @@ const FriendsPage: React.FC = () => {
             );
           })}
         </Grid>
-        
+
         {pagination.pages > 1 && (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-            <Pagination 
-              count={pagination.pages} 
+            <Pagination
+              count={pagination.pages}
               page={currentPage}
               onChange={handlePageChange}
-              color="primary" 
+              color="primary"
             />
           </Box>
         )}
@@ -533,32 +566,32 @@ const FriendsPage: React.FC = () => {
         </Alert>
       );
     }
-  
+
     // Debug sent requests data
     console.log('Sent requests data:', sentRequests);
-  
+
     return (
       <>
         <Typography variant="h6" sx={{ mt: 2, mb: 2 }}>
           Sent Requests ({pagination.total})
         </Typography>
-        
+
         <Grid container spacing={2}>
           {sentRequests.map((request) => {
             // Make sure recipient is a FriendUser object
-            const recipient = typeof request.recipient === 'string' 
-              ? null 
+            const recipient = typeof request.recipient === 'string'
+              ? null
               : request.recipient as FriendUser;
-              
+
             if (!recipient) {
               console.log('Invalid recipient for request:', request);
               return null; // Skip if data is malformed
             }
-            
+
             // Debug individual recipient
             console.log('Request recipient:', recipient);
             console.log('Recipient profile image:', recipient.profileImage || recipient.profilePicture);
-              
+
             return (
               <Grid size={{xs:12,sm:6}}key={request._id}>
                 <Paper sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
@@ -585,8 +618,8 @@ const FriendsPage: React.FC = () => {
                   </Box>
                   <Box>
                     <Tooltip title="Cancel Request">
-                      <IconButton 
-                        color="warning" 
+                      <IconButton
+                        color="warning"
                         onClick={() => handleCancelRequest(recipient._id)}
                       >
                         <Close />
@@ -603,14 +636,14 @@ const FriendsPage: React.FC = () => {
             );
           })}
         </Grid>
-        
+
         {pagination.pages > 1 && (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-            <Pagination 
-              count={pagination.pages} 
+            <Pagination
+              count={pagination.pages}
               page={currentPage}
               onChange={handlePageChange}
-              color="primary" 
+              color="primary"
             />
           </Box>
         )}
@@ -632,14 +665,14 @@ const FriendsPage: React.FC = () => {
         <Typography variant="h6" sx={{ mt: 2, mb: 2 }}>
           People You May Know
         </Typography>
-        
+
         <Grid container spacing={3}>
           {suggestions.map((suggestion) => (
             <Grid size={{xs:12,sm:6,md:4}} key={suggestion._id}>
               <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
-                  <Avatar 
-                    src={getProfileImage(suggestion)} 
+                  <Avatar
+                    src={getProfileImage(suggestion)}
                     alt={getUserName(suggestion)}
                     sx={{ width: 60, height: 60, mr: 2 }}
                   />
@@ -652,25 +685,25 @@ const FriendsPage: React.FC = () => {
                     </Typography>
                   </Box>
                 </Box>
-                
+
                 <CardContent sx={{ flexGrow: 1, pt: 0 }}>
                   <Typography variant="body2" color="text.secondary">
                     {suggestion.bio || 'No bio available'}
                   </Typography>
                 </CardContent>
-                
+
                 <CardActions>
-                  <Button 
-                    startIcon={<PersonAddIcon />} 
-                    variant="contained" 
+                  <Button
+                    startIcon={<PersonAddIcon />}
+                    variant="contained"
                     size="small"
                     onClick={() => handleSendFriendRequest(suggestion._id)}
                   >
                     Add Friend
                   </Button>
                   <Box sx={{ flexGrow: 1 }} />
-                  <Button 
-                    size="small" 
+                  <Button
+                    size="small"
                     onClick={() => viewProfile(suggestion._id)}
                   >
                     View Profile
@@ -680,10 +713,10 @@ const FriendsPage: React.FC = () => {
             </Grid>
           ))}
         </Grid>
-        
+
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-          <Button 
-            variant="outlined" 
+          <Button
+            variant="outlined"
             onClick={fetchSuggestions}
           >
             Refresh Suggestions
@@ -707,16 +740,16 @@ const FriendsPage: React.FC = () => {
         <Typography variant="h6" sx={{ mt: 2, mb: 2 }}>
           Blocked Users ({pagination.total})
         </Typography>
-        
+
         <Grid container spacing={2}>
           {blockedUsers.map((block) => {
             // Make sure recipient is a FriendUser object
-            const recipient = typeof block.recipient === 'string' 
-              ? null 
+            const recipient = typeof block.recipient === 'string'
+              ? null
               : block.recipient as FriendUser;
-              
+
             if (!recipient) return null; // Skip if data is malformed
-              
+
             return (
               <Grid size={{xs:12,sm:6}} key={block._id}>
                 <Paper sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
@@ -733,8 +766,8 @@ const FriendsPage: React.FC = () => {
                       @{recipient.username}
                     </Typography>
                   </Box>
-                  <Button 
-                    variant="outlined" 
+                  <Button
+                    variant="outlined"
                     onClick={() => handleUnblockUser(recipient._id)}
                   >
                     Unblock
@@ -744,14 +777,14 @@ const FriendsPage: React.FC = () => {
             );
           })}
         </Grid>
-        
+
         {pagination.pages > 1 && (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-            <Pagination 
-              count={pagination.pages} 
+            <Pagination
+              count={pagination.pages}
               page={currentPage}
               onChange={handlePageChange}
-              color="primary" 
+              color="primary"
             />
           </Box>
         )}
@@ -794,15 +827,15 @@ const FriendsPage: React.FC = () => {
             }}
             sx={{ mr: 1 }}
           />
-          <Button 
-            variant="contained" 
+          <Button
+            variant="contained"
             onClick={handleSearch}
             size="medium"
           >
             Search
           </Button>
         </Box>
-        
+
         <Tabs
           value={activeTab}
           onChange={handleTabChange}
@@ -811,11 +844,11 @@ const FriendsPage: React.FC = () => {
           variant="scrollable"
           scrollButtons="auto"
         >
-          <Tab label="Friends" />
-          <Tab label="Requests" />
-          <Tab label="Sent" />
-          <Tab label="Suggestions" />
-          <Tab label="Blocked" />
+          <Tab label="Friends" value={FriendTab.FRIENDS} />
+          <Tab label="Requests" value={FriendTab.REQUESTS} />
+          <Tab label="Sent" value={FriendTab.SENT} />
+          <Tab label="Suggestions" value={FriendTab.SUGGESTIONS} />
+          <Tab label="Blocked" value={FriendTab.BLOCKED} />
         </Tabs>
       </Paper>
 

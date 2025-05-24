@@ -221,9 +221,17 @@ const NotificationsPage: React.FC = () => {
                     cursor: 'pointer'
                   }}
                   onClick={() => {
+                      let targetLink = notification.link;
+
+                      // --- CRUCIAL CHANGE HERE ---
+                      if (notification.type === NotificationType.FRIEND_REQUEST) {
+                          targetLink = '/friends?tab=requests'; // Redirect to friends page with requests tab
+                      }
+                      // --- END CRUCIAL CHANGE ---
+
                       // Navigate to link first
-                      if (notification.link) {
-                          router.push(notification.link);
+                      if (targetLink) {
+                          router.push(targetLink);
                       }
                       // Then mark as read (optimistically or after navigation)
                       if (!notification.read) {
