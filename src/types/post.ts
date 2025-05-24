@@ -48,9 +48,9 @@ export interface Comment { // Exported as 'Comment' for CommentList.tsx
 // --- Post Interfaces (Based on your backend model and controller output) ---
 
 export interface IReportReason { // Exported as 'IReportReason'
-  user: User['_id'] | string; // FIX: user can be an ObjectId or string ID
+  user: User['_id'] | string; // user can be an ObjectId or string ID
   reason: string;
-  date: Date | string; // FIX: date can be Date object or string
+  date: Date | string; // date can be Date object or string
 }
 
 export interface IShare {
@@ -68,10 +68,10 @@ export interface Post {
   _id: string;
   user: PopulatedUser; // Assumed populated by API
   text: string; // Assumed required based on model, can be empty string
-  media?: MediaItem[]; // <-- Corrected to MediaItem[]
+  media?: MediaItem[]; // Corrected to MediaItem[]
   visibility: PostVisibility; // Use the enum
   likes: string[]; // Array of user IDs who liked the post (unpopulated)
-  comments: string[] | Comment[]; // Array of comment IDs (unpopulated) OR Comment[] if populated
+  comments: (string | Comment)[]; // <--- THIS IS THE CRUCIAL CHANGE
   tags: PopulatedUser[]; // Assumed populated by API
   reported: boolean; // Flag if the post is reported
   reportReasons: IReportReason[]; // Array of report reason objects
