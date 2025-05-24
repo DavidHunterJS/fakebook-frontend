@@ -545,7 +545,7 @@ const ProfilePage: React.FC = () => {
   // Photo click handler
   const handlePhotoClick = useCallback((photo: Photo) => {
     if (photo.postId) {
-      router.push(`/post/${photo.postId}`);
+      router.push(`/posts/${photo.postId}`);
     }
     else if (photo.albumId) {
       router.push(`/album/${photo.albumId}`);
