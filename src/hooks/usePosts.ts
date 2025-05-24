@@ -106,4 +106,4 @@ export const useGetUserPosts = (userId: string | undefined) => {
     },
     enabled: !!userId
   });
-};
+};  

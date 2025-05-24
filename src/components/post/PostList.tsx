@@ -1,17 +1,15 @@
 import React from 'react';
 import { Box, Typography, CircularProgress } from '@mui/material';
 import PostCard from './PostCard';
-import { useGetPosts } from '../../hooks/usePosts'; // Adjust path if needed
-import { Post, Comment, ReportReason } from '../../types/post'; // Added ReportReason import
-import { User } from '../../types/user'; // Adjust path if needed
+import { useGetPosts } from '../../hooks/usePosts';
+import { Post, Comment, IReportReason, PostVisibility, PopulatedUser } from '../../types/post';
+import { User } from '../../types/user';
 
-// Define a generic object type for when we don't know the exact structure
 interface CommentObject {
   _id: string;
-  [key: string]: unknown; // Allows any other properties but requires _id
+  [key: string]: unknown;
 }
 
-// Define a more accurate interface for the raw post data
 interface RawPost {
   _id?: string;
   text?: string;
@@ -19,33 +17,34 @@ interface RawPost {
   user?: string | Partial<User>;
   author?: string | Partial<User>;
   likes?: string[];
-  comments?: string[] | CommentObject[]; // Replace any[] with CommentObject[]
+  comments?: string[] | CommentObject[];
   createdAt?: string;
   updatedAt?: string;
   visibility?: string;
-  tags?: string[];
+  tags?: string[] | Partial<PopulatedUser>[];
   reported?: boolean;
-  shares?: number | string[]; // Updated to match both possible types
-  reportReasons?: string[] | Partial<ReportReason>[]; // Updated to handle both string and ReportReason
+  shares?: number | string[];
+  reportReasons?: string[] | Partial<IReportReason>[];
   likesCount?: number;
   commentsCount?: number;
   isLiked?: boolean;
   isSaved?: boolean;
 }
 
-// Type guard to check if a string is a valid visibility value
-function isValidVisibility(value: string | undefined): value is "public" | "friends" | "private" {
-  return value === "public" || value === "friends" || value === "private";
+function isValidVisibility(value: string | undefined): value is keyof typeof PostVisibility {
+  return value === 'public' || value === 'friends' || value === 'private';
 }
 
-// Type guard to check if comments are strings
 function isStringArray(arr: (string | CommentObject)[]): arr is string[] {
   return arr.length === 0 || typeof arr[0] === 'string';
 }
 
 const PostList: React.FC = () => {
+  // Cast the data to RawPost[] before mapping
   const { data, isLoading, error } = useGetPosts();
-  const posts: Post[] = data || [];
+  const posts: Post[] = data 
+    ? (data as unknown as RawPost[]).map(normalizePost) 
+    : [];
 
   if (isLoading) {
     return (
@@ -75,18 +74,12 @@ const PostList: React.FC = () => {
   return (
     <Box>
       {posts.map(post => (
-        post._id ? <PostCard key={post._id} post={normalizePost(post as unknown as RawPost)} /> : null
+        post._id ? <PostCard key={post._id} post={post} /> : null
       ))}
     </Box>
   );
 };
 
-/**
- * Normalizes the raw post data received from the API to match the expected Post type,
- * especially handling the user and media fields.
- * @param rawPost - The raw post object from the API response.
- * @returns A normalized Post object suitable for the PostCard component.
- */
 const normalizePost = (rawPost: RawPost): Post => {
   const defaultUser: User = {
     _id: 'unknown',
@@ -97,102 +90,109 @@ const normalizePost = (rawPost: RawPost): Post => {
     profilePicture: 'default-avatar.png'
   };
 
-  let userObject: User;
+  // Handle user/author
   const apiUser = rawPost.user || rawPost.author;
-  
-  if (apiUser && typeof apiUser === 'object') {
-    userObject = { ...defaultUser, ...apiUser };
+  const userObject: User = apiUser && typeof apiUser === 'object' 
+    ? { ...defaultUser, ...apiUser } 
+    : defaultUser;
+
+  // Handle media conversion from string[] to MediaItem[]
+  const mediaItems = rawPost.media?.map(mediaString => ({
+    url: getFullImageUrl(mediaString, 'post'),
+    key: mediaString,
+    type: mediaString.match(/\.(mp4|mov|avi)$/i) ? 'video' : 'image',
+    originalFilename: mediaString.split('/').pop() || mediaString
+  })) || [];
+
+  // Handle visibility conversion to enum
+  let visibility: PostVisibility;
+  if (rawPost.visibility && isValidVisibility(rawPost.visibility)) {
+    visibility = PostVisibility[rawPost.visibility.toUpperCase() as keyof typeof PostVisibility];
   } else {
-    userObject = defaultUser;
+    visibility = PostVisibility.PUBLIC;
   }
 
-  const imageFilename = (rawPost.media && Array.isArray(rawPost.media) && rawPost.media.length > 0)
-    ? rawPost.media[0]
+  // Handle tags conversion to PopulatedUser[]
+  const tags: PopulatedUser[] = rawPost.tags
+    ? rawPost.tags.map(tag => {
+        if (typeof tag === 'string') {
+          return {
+            _id: tag,
+            username: `user_${tag.substring(0, 4)}`,
+            firstName: '',
+            lastName: '',
+            profilePicture: ''
+          };
+        } else {
+          return {
+            _id: tag._id || 'unknown',
+            username: tag.username || `user_${tag._id?.substring(0, 4) || 'unknown'}`,
+            firstName: tag.firstName || '',
+            lastName: tag.lastName || '',
+            profilePicture: tag.profilePicture || tag.profileImage || ''
+          };
+        }
+      })
+    : [];
+
+  // Handle shares conversion
+  const sharesArray = rawPost.shares !== undefined
+    ? typeof rawPost.shares === 'number'
+      ? Array(rawPost.shares).fill('')
+      : Array.isArray(rawPost.shares)
+        ? rawPost.shares
+        : []
     : undefined;
 
-  // Ensure visibility is one of the allowed values
-  let validVisibility: "public" | "friends" | "private" | undefined;
-  if (rawPost.visibility && isValidVisibility(rawPost.visibility)) {
-    validVisibility = rawPost.visibility;
-  } else {
-    validVisibility = "public"; // Default to public if invalid or undefined
-  }
-
-  // Handle shares - convert number to string array if needed
-  let sharesArray: string[] | undefined;
-  if (rawPost.shares !== undefined) {
-    if (typeof rawPost.shares === 'number') {
-      // Convert number to a string array with that many empty strings
-      // Or you might want to handle this differently based on your app's logic
-      sharesArray = Array(rawPost.shares).fill('');
-    } else if (Array.isArray(rawPost.shares)) {
-      // Already an array, assume it's string[]
-      sharesArray = rawPost.shares;
-    } else {
-      // Default case
-      sharesArray = [];
-    }
-  } else {
-    sharesArray = undefined;
-  }
-
-  // Handle comments based on what type they are
+  // Handle comments conversion
   let commentsValue: string[] | Comment[] = [];
   if (rawPost.comments && Array.isArray(rawPost.comments)) {
-    if (isStringArray(rawPost.comments)) {
-      // If they're string IDs
-      commentsValue = rawPost.comments;
+    commentsValue = isStringArray(rawPost.comments)
+      ? rawPost.comments
+      : rawPost.comments as unknown as Comment[];
+  }
+
+  // Handle report reasons conversion
+  const reportReasonsValue = rawPost.reportReasons?.map(reason => {
+    if (typeof reason === 'string') {
+      return {
+        reason,
+        user: 'unknown',
+        date: new Date()
+      };
     } else {
-      // Try to convert them to the correct Comment type
-      try {
-        commentsValue = rawPost.comments as unknown as Comment[];
-      } catch (e) {
-        console.error('Error converting comments:', e);
-        commentsValue = [];
-      }
+      return {
+        reason: reason.reason || '',
+        user: reason.user || 'unknown',
+        date: reason.date ? new Date(reason.date) : new Date()
+      };
     }
-  }
+  });
 
-  // Convert string reasons to ReportReason objects
-  let reportReasonsValue: ReportReason[] | undefined;
-  if (rawPost.reportReasons && Array.isArray(rawPost.reportReasons)) {
-    reportReasonsValue = rawPost.reportReasons.map(reason => {
-      if (typeof reason === 'string') {
-        // Convert string to ReportReason object
-        return {
-          reason: reason
-        };
-      } else {
-        // Already a ReportReason object
-        return reason as ReportReason;
-      }
-    });
-  } else {
-    reportReasonsValue = undefined;
-  }
-
-  const normalized: Post = {
+  return {
     _id: rawPost._id || `temp_${Math.random()}`,
     text: rawPost.text || '',
-    media: rawPost.media || [],
+    media: mediaItems,
     user: userObject,
     likes: rawPost.likes || [],
     comments: commentsValue,
     createdAt: rawPost.createdAt || new Date().toISOString(),
     updatedAt: rawPost.updatedAt || new Date().toISOString(),
-    visibility: validVisibility,
-    tags: rawPost.tags,
-    reported: rawPost.reported,
+    visibility,
+    tags,
+    reported: rawPost.reported || false,
     shares: sharesArray,
-    reportReasons: reportReasonsValue,
-    likesCount: rawPost.likesCount,
-    commentsCount: rawPost.commentsCount,
-    isLiked: rawPost.isLiked,
-    isSaved: rawPost.isSaved,
-    image: imageFilename
+    reportReasons: reportReasonsValue || [],
+    likesCount: rawPost.likesCount || 0,
+    commentsCount: rawPost.commentsCount || 0,
+    isLiked: rawPost.isLiked || false,
+    isSaved: rawPost.isSaved || false
   };
-
-  return normalized;
 };
+
+// Helper function to generate full image URLs
+function getFullImageUrl(key: string, type: 'post' | 'profile'): string {
+  return `https://your-bucket.s3.amazonaws.com/${type}/${key}`;
+}
 
 export default PostList;

@@ -38,7 +38,7 @@ import {
 import useAuth from '../../hooks/useAuth'; // Adjust path if needed
 import api from '../../utils/api'; // Adjust path if needed
 import { User } from '../../types/user'; // Adjust path if needed
-import { Post } from '../../types/post'; // Adjust path if needed
+import { Post, MediaItem } from '../../types/post'; // Adjust path if needed
 import PostCard from '../../components/post/PostCard'; // Adjust path if needed
 import {getFullImageUrl}  from '../../utils/imgUrl'; // Adjust the path as needed
 
@@ -444,24 +444,26 @@ const ProfilePage: React.FC = () => {
 
       const photosFromPosts: Photo[] = [];
       if (postsForMedia.length > 0) {
-        postsForMedia.forEach(post => {
-          if (post.media && Array.isArray(post.media) && post.media.length > 0) {
-            post.media.forEach((mediaFilename: string) => {
-              photosFromPosts.push({
-                _id: `${post._id}-${mediaFilename}`,
-                url: getFullImageUrl(mediaFilename, 'post'),
-                filename: mediaFilename,
-                caption: post.content?.substring(0, 100) || '',
-                createdAt: post.createdAt || new Date().toISOString(),
-                postId: post._id,
-                likes: post.likes?.length || 0,
-                comments: post.comments?.length || 0
+          postsForMedia.forEach(post => {
+            // Check if post.media exists and is an array with items
+            if (post.media && Array.isArray(post.media) && post.media.length > 0) {
+              // --- FIX IS HERE ---
+              // The item in the forEach loop is a MediaItem, not a string
+              post.media.forEach((mediaItem: MediaItem) => { // Type 'mediaItem' as MediaItem
+                photosFromPosts.push({
+                  _id: `${post._id}-${mediaItem.key || mediaItem.url}`, // Use mediaItem.key or mediaItem.url for a unique ID
+                  url: getFullImageUrl(mediaItem.key || mediaItem.url, 'post'), // Use mediaItem.key or mediaItem.url
+                  filename: mediaItem.originalFilename || mediaItem.key || mediaItem.url, // Use originalFilename, or key, or url
+                  caption: post.text?.substring(0, 100) || '', // Use post.text based on your Post model, not post.content
+                  createdAt: post.createdAt || new Date().toISOString(),
+                  postId: post._id,
+                  likes: post.likes?.length || 0,
+                  comments: post.comments?.length || 0 // Assuming comments is an array of IDs or populated objects
+                });
               });
-            });
-          }
-        });
-        setDebug(prev => [...prev, `Extracted ${photosFromPosts.length} photos from posts`]);
-      }
+            }
+          });
+        }
 
       const photosFromAlbums: Photo[] = [];
       try {

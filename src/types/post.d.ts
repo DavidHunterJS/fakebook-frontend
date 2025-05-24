@@ -1,63 +1,104 @@
 // src/types/post.ts
-import { User } from './user'; // Adjust path if needed
 
-// Define a ReportReason interface
-export interface ReportReason {
-  _id?: string;
-  reason: string;
-  reportedBy?: string | User; // User ID or User object
-  createdAt?: string | Date;
-  additionalInfo?: string;
-  status?: 'pending' | 'reviewed' | 'dismissed' | 'actioned';
+// Adjust path if needed based on where your main User interface is defined
+import { User } from './user'; // Assuming 'User' here is the full populated User interface
+
+// --- Core Interfaces used across Post and Comment ---
+
+export interface PopulatedUser {
+  _id: string;
+  username: string;
+  firstName?: string;
+  lastName?: string;
+  profilePicture?: string; // S3 key
+  profileImage?: string; // S3 key (alternative or legacy)
+  // Add any other user fields that are populated (e.g., email, avatar, etc.)
 }
 
-// Define the structure for a Comment if not already defined elsewhere
+export interface MediaItem { // THIS IS THE CORRECT TYPE FOR MEDIA ITEMS
+  url: string;
+  key: string;
+  type: string; // e.g., 'image', 'video'
+  originalFilename?: string;
+}
+
+export interface PopulatedReply {
+  _id: string;
+  user: PopulatedUser; // Populated user who made the reply
+  text: string;
+  likes: string[]; // User IDs who liked the reply
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
 export interface Comment {
   _id: string;
   text: string;
-  user: User | string; // Can be populated or just ID
+  user: PopulatedUser | string; // User can be populated or just an ID
   post: string; // ID of the parent post
-  createdAt: string | Date;
-  updatedAt: string | Date;
-  // Add other comment fields if necessary
+  likes: string[]; // User IDs who liked the comment
+  createdAt: string;
+  updatedAt: string;
+  replies?: PopulatedReply[]; // If replies are populated as well
+  reported?: boolean;
+  reportReasons?: IReportReason[];
 }
 
-// Define the main Post interface
+
+// --- Post Interfaces (Based on your backend model and controller output) ---
+
+export interface IReportReason {
+  user: User['_id'];
+  reason: string;
+  date: Date;
+}
+
+export interface IShare {
+  user: User['_id'];
+  date: Date;
+}
+
+// In your types/post.ts file
+export enum PostVisibility {
+  PUBLIC = 'public',
+  FRIENDS = 'friends',
+  PRIVATE = 'private'
+}
+
 export interface Post {
   _id: string;
-  user: User | string; // Populated User object or user ID string
-  text?: string;
-  media?: string[];   // Array of image/video filenames or URLs
-  image?: string;     // Optional: Primarily used by frontend after extracting from media[0]
-  imageUrl?: string;
-  likes: string[];    // Array of user IDs who liked the post
-  comments: Comment[] | string[]; // Array of Comment objects or comment IDs
-  visibility?: 'public' | 'friends' | 'private'; // Post visibility
-  tags?: string[];    // Optional array of tags
-  reported?: boolean; // Optional flag if the post is reported
-  shares?: string[];  // Optional array of user IDs who shared, or Share objects
-  reportReasons?: ReportReason[]; // Array of report reason objects
+  user: PopulatedUser;
+  text: string;
+  media?: MediaItem[]; // <-- FIX: Changed from string[] to MediaItem[]
+  visibility: PostVisibility;
+  likes: string[];
+  comments: string[] | Comment[];
+  tags: PopulatedUser[];
+  reported: boolean;
+  reportReasons: IReportReason[];
   createdAt: string;
-  updatedAt: string | Date;
+  updatedAt: string;
 
-  // Optional fields often added during processing/aggregation
-  likesCount?: number;
-  commentsCount?: number;
-  isLiked?: boolean;  // Specific to the viewing user
-  isSaved?: boolean;  // Specific to the viewing user
+  likesCount: number;
+  commentsCount: number;
+  isLiked: boolean;
+  isSaved: boolean;
 
-  // Include legacy fields if needed for compatibility during transition
-  content?: string; // If sometimes used instead of 'text'
-  author?: User | string; // If sometimes used instead of 'user'
+  pinned?: boolean;
+  originalPost?: string;
+  sharedFrom?: string;
+  shares?: IShare[];
 }
 
-// Interface for API responses containing multiple posts (e.g., feed)
 export interface PostsResponse {
   posts: Post[];
-  pagination?: { // Make pagination optional
+  pagination?: {
       total?: number;
       page?: number;
       pages?: number;
   };
-  // Add other potential response fields if needed
 }
+
+
+
+

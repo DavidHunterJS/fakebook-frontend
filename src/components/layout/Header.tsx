@@ -31,35 +31,12 @@ import {
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import useAuth from '../../hooks/useAuth'; // Adjust path if needed
+import { getFullImageUrl } from '../../utils/imgUrl';
 
-import {getFullImageUrl} from '../../utils/imgUrl'
-
-// --- Helper to construct full image URLs ---
-// Ensure NEXT_PUBLIC_BACKEND_BASE_URL is set in your .env.local (e.g., http://localhost:5000)
-// const BACKEND_STATIC_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
-
-// const getFullImageUrl = (filenameOrUrl?: string, type: 'profile' | 'cover' = 'profile'): string => {
-//   const defaultProfilePic = '/images/default-avatar.png';
-
-//   if (!filenameOrUrl) {
-//       return defaultProfilePic;
-//   }
-//   const trimmedInput = filenameOrUrl.trim();
-//   if (trimmedInput.startsWith('http://') || trimmedInput.startsWith('https://')) {
-//       return trimmedInput;
-//   }
-//   if (trimmedInput === 'default-avatar.png') {
-//       return defaultProfilePic;
-//   }
-  
-//   // Construct full URL to image served by the BACKEND
-//   const pathSegment = type === 'cover' ? 'covers' : type;
-  
-//   // Add cache busting parameter with timestamp
-//   return `${BACKEND_STATIC_URL}/uploads/${pathSegment}/${trimmedInput}?t=${Date.now()}`;
-// };
-// // --- End Helper ---
-
+// --- NEW IMPORTS ---
+import { useQuery } from '@tanstack/react-query';
+import axios from '../../lib/axios'; // Your Axios instance
+// --- END NEW IMPORTS ---
 
 const Search = styled('div')(({ theme }) => ({
   position: 'relative',
@@ -106,6 +83,33 @@ const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
+  // --- NEW: FETCH UNREAD NOTIFICATION COUNT ---
+  const { data: unreadCountData } = useQuery({
+    queryKey: ['unreadNotificationsCount'],
+    queryFn: async () => {
+      // Only fetch if authenticated
+      if (!isAuthenticated) return { count: 0 };
+      try {
+        const response = await axios.get('/notifications/unread-count');
+        return response.data; // Expected format: { count: number }
+      } catch (error) {
+        console.error('Failed to fetch unread notification count:', error);
+        return { count: 0 }; // Return 0 on error
+      }
+    },
+    // The query should only run if the user is authenticated
+    enabled: isAuthenticated,
+    // Refetch interval to keep the count updated (e.g., every 30 seconds)
+    refetchInterval: 30000,
+    // Refetch when the window regains focus (user returns to tab)
+    refetchOnWindowFocus: true,
+    // Keep data fresh when component remounts or query key changes
+    staleTime: 5000, // Data is fresh for 5 seconds
+  });
+
+  const unreadCount = unreadCountData?.count || 0;
+  // --- END NEW ---
+
   const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
   };
@@ -132,7 +136,7 @@ const Header = () => {
       keepMounted
       open={Boolean(anchorEl)}
       onClose={handleMenuClose}
-      anchorOrigin={{ // Position menu slightly below avatar
+      anchorOrigin={{
         vertical: 'bottom',
         horizontal: 'right',
       }}
@@ -156,10 +160,9 @@ const Header = () => {
 
   const drawer = (
     <div>
-      {/* Consider adding a Toolbar or equivalent for spacing */}
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
          <Avatar
-            src={getFullImageUrl(user?.profilePicture, 'profile')} // Use helper here too
+            src={getFullImageUrl(user?.profilePicture, 'profile')}
             alt={user?.username}
             sx={{ width: 40, height: 40 }}
          />
@@ -232,11 +235,11 @@ const Header = () => {
             noWrap
             component="div"
             sx={{ display: { xs: 'none', sm: 'block' }, cursor: 'pointer' }}
-            onClick={() => router.push('/')} // Make title clickable to go home
+            onClick={() => router.push('/')}
           >
             Fakebook
           </Typography>
-          {isAuthenticated && user && ( // Check for user existence as well
+          {isAuthenticated && user && (
             <>
               <Search>
                 <SearchIconWrapper>
@@ -248,12 +251,14 @@ const Header = () => {
                 />
               </Search>
               <Box sx={{ flexGrow: 1 }} />
-              <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center' }}> {/* Hide icons on smaller screens if needed */}
+              <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center' }}>
                 <Link href="/notifications" passHref legacyBehavior>
                   <IconButton color="inherit" component="a">
-                    <Badge badgeContent={0} color="error"> {/* Replace 0 with actual count */}
+                    {/* --- UPDATED BADGE CONTENT --- */}
+                    <Badge badgeContent={unreadCount} color="error">
                       <NotificationsIcon />
                     </Badge>
+                    {/* --- END UPDATED BADGE CONTENT --- */}
                   </IconButton>
                 </Link>
                 <IconButton
@@ -264,14 +269,12 @@ const Header = () => {
                   onClick={handleProfileMenuOpen}
                   color="inherit"
                 >
-                  {/* --- CORRECTION HERE --- */}
                   <Avatar
                     key={`header-avatar-${user?._id || 'guest'}-${Date.now()}`}
                     src={getFullImageUrl(user?.profilePicture, 'profile')}
                     alt={user?.username || 'User Avatar'}
                     sx={{ width: 32, height: 32 }}
                   />
-                  {/* --- END CORRECTION --- */}
                 </IconButton>
               </Box>
             </>
@@ -283,7 +286,7 @@ const Header = () => {
         open={mobileOpen}
         onClose={handleDrawerToggle}
         ModalProps={{
-          keepMounted: true, // Better open performance on mobile.
+          keepMounted: true,
         }}
         sx={{
           display: { xs: 'block', sm: 'none' },
