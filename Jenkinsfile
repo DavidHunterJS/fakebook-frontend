@@ -51,7 +51,11 @@ pipeline {
                 }
             }
         }
-
+        stage('Verify Installations') {
+            steps {
+                sh 'npm list has-flag supports-color chalk jest'
+            }   
+        }
         stage('Run Tests') {
             steps {
                 script {
