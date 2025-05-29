@@ -16,7 +16,7 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    sh 'curl https://cli-assets.heroku.com/install.sh | sh'
+                    sh 'npm install heroku --save-dev'
                     sh 'rm -rf node_modules package-lock.json'
                     sh 'npm install --force'
                 }
