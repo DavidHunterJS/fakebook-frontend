@@ -49,6 +49,8 @@ pipeline {
                         chmod 600 /var/lib/jenkins/.ssh/known_hosts
 
                         echo "Step 3: Adding Heroku to known_hosts..."
+                        echo "SSH directory contents:"
+                        ls -lsa /var/lib/jenkins/.ssh/
                         ssh-keyscan -H heroku.com >> /var/lib/jenkins/.ssh/known_hosts
                         
                         echo "Step 4: Verifying HEROKU_API_KEY is set..."
