@@ -17,7 +17,6 @@ pipeline {
             steps {
                 script {
                     sh 'rm -rf node_modules package-lock.json'
-                    sh 'npm install heroku --save-dev'
                     sh 'npm install --force'
                 }
             }
