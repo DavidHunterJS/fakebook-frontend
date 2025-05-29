@@ -38,7 +38,8 @@ pipeline {
                     echo 'Deploying to Heroku...'
                     sh '''
                         set -x
-                        set -e
+                        # Temporarily remove set -e to see all errors
+                        # set -e
 
                         echo "Step 1: Setting up SSH directory..."
                         mkdir -p /var/lib/jenkins/.ssh
@@ -48,21 +49,31 @@ pipeline {
                         touch /var/lib/jenkins/.ssh/known_hosts
                         chmod 600 /var/lib/jenkins/.ssh/known_hosts
 
-                        echo "Step 3: Adding Heroku to known_hosts..."
-                        ssh-keyscan -H heroku.com >> /var/lib/jenkins/.ssh/known_hosts
+                        echo "Step 3: Testing network connectivity..."
+                        # Check if we can reach heroku.com
+                        ping -c 1 heroku.com || echo "Ping failed, but continuing..."
+                        
+                        echo "Step 4: Adding Heroku to known_hosts..."
+                        # Try with timeout and verbose mode
+                        ssh-keyscan -v -T 10 -H heroku.com 2>&1 || echo "ssh-keyscan failed with exit code: $?"
+                        
+                        # Try appending to known_hosts even if it fails
+                        ssh-keyscan -T 10 -H heroku.com >> /var/lib/jenkins/.ssh/known_hosts 2>&1 || true
+                        
+                        echo "Step 5: Check known_hosts content..."
+                        cat /var/lib/jenkins/.ssh/known_hosts || echo "known_hosts is empty"
                         
                         echo "SSH directory contents:"
                         ls -lsa /var/lib/jenkins/.ssh/
                         
-                        echo "Step 4: Verifying HEROKU_API_KEY is set..."
+                        echo "Step 6: Verifying HEROKU_API_KEY is set..."
                         if [ -z "$HEROKU_API_KEY" ]; then
                             echo "ERROR: HEROKU_API_KEY is not set. Check Jenkins credentials."
                             exit 1
                         fi
                         echo "HEROKU_API_KEY is present."
 
-                        echo "Step 5: Deployment preparation complete!"
-                        # Deployment commands will go here later
+                        echo "Step 7: Deployment preparation complete!"
                     '''
                 }
             }
