@@ -2,7 +2,7 @@ pipeline {
     agent any
     environment {
         HEROKU_APP_NAME = 'fakebook-frontend'
-        HEROKU_API_KEY = credentials('HEROKU_API_KEY')
+        HEROKU_API_KEY = credentials('HRKU-818f997e-100f-4f98-867e-a10ddb680222')
     }
     tools {
         nodejs 'NodeJS_18_on_EC2'
@@ -33,9 +33,6 @@ pipeline {
             }
         }
     stage('Deploy to Heroku') {
-        environment{
-            HEROKU_API_KEY = credentials('HRKU-818f997e-100f-4f98-867e-a10ddb680222')
-        }
         steps {
             script {
                 echo 'Deploying to Heroku...'
