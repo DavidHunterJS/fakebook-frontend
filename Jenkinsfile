@@ -70,8 +70,9 @@ pipeline {
             // This stage only runs if a 'build' script exists in package.json (common for SPAs)
             when {
                 // Check if 'package.json' exists and contains a 'build' script
-                expression { fileExists('package.json') && new File('package.json').text.contains('"build":') }
-            }
+            expression { 
+                        return sh(script: 'test -f package.json && grep -q \'"build":\' package.json', returnStatus: true) == 0 
+                    }            }
             steps {
                 script {
                     echo 'Building frontend assets...'
