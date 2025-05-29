@@ -37,8 +37,8 @@ pipeline {
             script {
                 echo 'Deploying to Heroku...'
                 sh '''
-                    set -x // Prints commands before execution (you already have this effect)
-                    set -e // Exits immediately if a command exits with a non-zero status
+                    set -x # Prints commands before execution (you already have this effect)
+                    set -e # Exits immediately if a command exits with a non-zero status
 
                     echo "Step 1: Setting up SSH directory..."
                     mkdir -p /var/lib/jenkins/.ssh
