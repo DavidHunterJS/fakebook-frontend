@@ -33,6 +33,9 @@ pipeline {
             }
         }
     stage('Deploy to Heroku') {
+        environment{
+            HEROKU_API_KEY = credentials('HRKU-818f997e-100f-4f98-867e-a10ddb680222')
+        }
         steps {
             script {
                 echo 'Deploying to Heroku...'
