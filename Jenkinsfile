@@ -80,6 +80,7 @@ stage('Deploy to Heroku') {
         }
     }
 }
+    }
     post {
         always {
             echo 'Pipeline finished.'
