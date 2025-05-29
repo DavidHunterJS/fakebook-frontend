@@ -37,7 +37,7 @@ pipeline {
                 script {
                     echo 'Deploying to Heroku...'
                     sh 'mkdir -p ~/.ssh && chmod 700 ~/.ssh'
-                    sh 'ssh-keyscan -H heroku.com >> ~/.ssh/known_hosts'
+                    sh 'ssh-keyscan -v -H heroku.com >> ~/.ssh/known_hosts'
                     sh 'chmod 600 ~/.ssh/known_hosts'
                     sh 'npx heroku git:remote -a ${HEROKU_APP_NAME}'
                     sh 'git push https://heroku:${HEROKU_API_KEY}@git.heroku.com/${HEROKU_APP_NAME}.git HEAD:main -f'
