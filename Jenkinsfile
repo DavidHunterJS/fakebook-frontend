@@ -40,14 +40,9 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    echo 'Installing npm dependencies...'
-                    // --- Adjust these commands based on your project structure ---
-                    // If your full-stack app has a single package.json at the root:
-                    sh 'npm install'
-
-                    // OR, if you have separate frontend/backend folders with their own package.json:
-                    // sh 'cd backend && npm install'
-                    // sh 'cd frontend && npm install'
+                    echo 'Cleaning and reinstalling dependencies...'
+                    sh 'rm -rf node_modules package-lock.json'
+                    sh 'npm install --force'
                 }
             }
         }
