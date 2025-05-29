@@ -38,42 +38,43 @@ pipeline {
                     echo 'Deploying to Heroku...'
                     sh '''
                         set -x
-                        # Temporarily remove set -e to see all errors
-                        # set -e
-
-                        echo "Step 1: Setting up SSH directory..."
-                        mkdir -p /var/lib/jenkins/.ssh
-                        chmod 700 /var/lib/jenkins/.ssh
+                        set -e
                         
-                        echo "Step 2: Preparing known_hosts file..."
-                        touch /var/lib/jenkins/.ssh/known_hosts
-                        chmod 600 /var/lib/jenkins/.ssh/known_hosts
-
-                        echo "Step 3: Testing network connectivity..."
-                        # Check if we can reach heroku.com
-                        ping -c 1 heroku.com || echo "Ping failed, but continuing..."
-                        
-                        echo "Step 4: Adding Heroku to known_hosts..."
-                        # Try with timeout and verbose mode
-                        ssh-keyscan -v -T 10 -H heroku.com 2>&1 || echo "ssh-keyscan failed with exit code: $?"
-                        
-                        # Try appending to known_hosts even if it fails
-                        ssh-keyscan -T 10 -H heroku.com >> /var/lib/jenkins/.ssh/known_hosts 2>&1 || true
-                        
-                        echo "Step 5: Check known_hosts content..."
-                        cat /var/lib/jenkins/.ssh/known_hosts || echo "known_hosts is empty"
-                        
-                        echo "SSH directory contents:"
-                        ls -lsa /var/lib/jenkins/.ssh/
-                        
-                        echo "Step 6: Verifying HEROKU_API_KEY is set..."
+                        echo "Step 1: Verifying HEROKU_API_KEY is set..."
                         if [ -z "$HEROKU_API_KEY" ]; then
-                            echo "ERROR: HEROKU_API_KEY is not set. Check Jenkins credentials."
+                            echo "ERROR: HEROKU_API_KEY is not set."
                             exit 1
                         fi
                         echo "HEROKU_API_KEY is present."
-
-                        echo "Step 7: Deployment preparation complete!"
+                        
+                        echo "Step 2: Setting up Heroku CLI..."
+                        export HEROKU_API_KEY=$HEROKU_API_KEY
+                        
+                        # Check if Heroku CLI is available
+                        if command -v heroku &> /dev/null; then
+                            echo "Using system Heroku CLI"
+                            HEROKU_CMD="heroku"
+                        elif [ -f "node_modules/.bin/heroku" ]; then
+                            echo "Using local Heroku CLI"
+                            HEROKU_CMD="node_modules/.bin/heroku"
+                        else
+                            echo "ERROR: Heroku CLI not found!"
+                            exit 1
+                        fi
+                        
+                        echo "Step 3: Configuring git..."
+                        git config user.email "jenkins@your-domain.com"
+                        git config user.name "Jenkins CI"
+                        
+                        echo "Step 4: Adding Heroku remote..."
+                        git remote add heroku https://heroku:$HEROKU_API_KEY@git.heroku.com/${HEROKU_APP_NAME}.git || \
+                        git remote set-url heroku https://heroku:$HEROKU_API_KEY@git.heroku.com/${HEROKU_APP_NAME}.git
+                        
+                        echo "Step 5: Deploying to Heroku..."
+                        git push heroku main --force
+                        
+                        echo "Step 6: Deployment complete!"
+                        echo "App should be available at: https://${HEROKU_APP_NAME}.herokuapp.com"
                     '''
                 }
             }
