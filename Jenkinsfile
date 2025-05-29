@@ -2,7 +2,7 @@ pipeline {
     agent any
     environment {
         HEROKU_APP_NAME = 'fakebook-frontend'
-        HEROKU_API_KEY = credentials('HRKU-818f997e-100f-4f98-867e-a10ddb680222')
+        HEROKU_API_KEY = credentials('HEROKU_API_KEY')
     }
     tools {
         nodejs 'NodeJS_18_on_EC2'
