@@ -168,7 +168,6 @@ pipeline {
                             echo "Visit your app at: $APP_URL"
                         else
                             echo "⚠️  App returned status $HTTP_STATUS"
-                            echo "Checking Heroku logs..."
                             # Don't fail the build since the app is actually deployed
                             echo "Note: App may still be starting up. Check $APP_URL"
                         fi
@@ -191,11 +190,11 @@ pipeline {
         }
         success {
             script {
-                sh '''
-                    APP_URL=$(heroku info -a ${HEROKU_APP_NAME} --json | grep web_url | cut -d '"' -f 4 || echo "https://${HEROKU_APP_NAME}.herokuapp.com")
-                    echo "✅ Pipeline succeeded! App deployed to Heroku from ${params.DEPLOY_BRANCH} branch."
-                    echo "View app at: $APP_URL"
-                '''
+                sh """
+                APP_URL=\$(heroku info -a ${HEROKU_APP_NAME} --json | grep web_url | cut -d '"' -f 4 || echo "https://${HEROKU_APP_NAME}.herokuapp.com")
+                echo "✅ Pipeline succeeded! App deployed to Heroku from ${params.DEPLOY_BRANCH} branch."
+                echo "View app at: \$APP_URL"
+            """
             }
         }
         failure {
