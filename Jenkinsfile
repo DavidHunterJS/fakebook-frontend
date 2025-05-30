@@ -169,7 +169,8 @@ pipeline {
                         else
                             echo "⚠️  App returned status $HTTP_STATUS"
                             echo "Checking Heroku logs..."
-                            heroku logs --tail -n 50 -a ${HEROKU_APP_NAME}
+                            # Only show logs from last 2 minutes
+                            heroku logs --tail -n 50 -a ${HEROKU_APP_NAME} -t '2 minutes ago' || true
                             # Don't fail the build since the app is actually deployed
                             echo "Note: App may still be starting up. Check $APP_URL"
                         fi

@@ -47,6 +47,109 @@ const nextConfig: NextConfig = {
       // },
     ],
   },
+  
+  // Add security headers and rate limiting
+  async headers() {
+    return [
+      {
+        // Apply security headers to all routes
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-DNS-Prefetch-Control',
+            value: 'on'
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY'
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff'
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block'
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'origin-when-cross-origin'
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()'
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=31536000; includeSubDomains'
+          },
+          {
+            // Rate limiting header (informational)
+            key: 'X-RateLimit-Limit',
+            value: '100'
+          },
+        ],
+      },
+      {
+        // Block access to sensitive files
+        source: '/.env',
+        headers: [
+          {
+            key: 'X-Robots-Tag',
+            value: 'noindex'
+          }
+        ],
+      },
+      {
+        // Block access to git files
+        source: '/.git/:path*',
+        headers: [
+          {
+            key: 'X-Robots-Tag',
+            value: 'noindex'
+          }
+        ],
+      },
+    ]
+  },
+
+  // Redirect suspicious requests
+  async redirects() {
+    return [
+      // Redirect common vulnerability scan paths to 404
+      {
+        source: '/.env',
+        destination: '/404',
+        permanent: false,
+      },
+      {
+        source: '/.git/:path*',
+        destination: '/404',
+        permanent: false,
+      },
+      {
+        source: '/wp-admin/:path*',
+        destination: '/404',
+        permanent: false,
+      },
+      {
+        source: '/phpinfo.php',
+        destination: '/404',
+        permanent: false,
+      },
+      {
+        source: '/.aws/:path*',
+        destination: '/404',
+        permanent: false,
+      },
+      {
+        source: '/config/:path*',
+        destination: '/404',
+        permanent: false,
+      },
+    ]
+  },
+
   // ... any other configurations you might have for Next.js ...
 };
 
