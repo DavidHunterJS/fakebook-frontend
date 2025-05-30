@@ -196,6 +196,7 @@ pipeline {
                     echo "✅ Pipeline succeeded! App deployed to Heroku from ${params.DEPLOY_BRANCH} branch."
                     echo "View app at: $APP_URL"
                 '''
+            }
         }
         failure {
             echo "❌ Pipeline failed! Check console for errors."
