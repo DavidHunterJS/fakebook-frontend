@@ -2,14 +2,18 @@ pipeline {
     agent any
     
     parameters {
+        choice(name: 'ENVIRONMENT', choices: ['staging', 'production'], description: 'Deploy to which environment?')
         choice(name: 'DEPLOY_BRANCH', choices: ['main', 'develop'], description: 'Branch to deploy')
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip running tests')
         booleanParam(name: 'FORCE_DEPLOY', defaultValue: false, description: 'Force deployment without approval')
     }
     
     environment {
-        HEROKU_APP_NAME = 'fakebook-frontend'
+        // Dynamic app name based on environment
+        HEROKU_APP_NAME = "${params.ENVIRONMENT == 'staging' ? 'fakebook-frontend-staging' : 'fakebook-frontend'}"
         HEROKU_API_KEY = credentials('HEROKU_API_KEY')
+        // For CI/CD clarity
+        DEPLOY_ENV = "${params.ENVIRONMENT}"
     }
     
     tools {
@@ -17,6 +21,25 @@ pipeline {
     }
     
     stages {
+        stage('Environment Info') {
+            steps {
+                echo "🎯 Deploying to: ${params.ENVIRONMENT}"
+                echo "📦 Heroku app: ${HEROKU_APP_NAME}"
+                echo "🌿 Branch: ${params.DEPLOY_BRANCH}"
+                echo "🔨 Build: ${BUILD_NUMBER}"
+                
+                // Validate branch/environment combination
+                script {
+                    if (params.ENVIRONMENT == 'production' && params.DEPLOY_BRANCH != 'main') {
+                        echo "⚠️  WARNING: Deploying non-main branch to production!"
+                    }
+                    if (params.ENVIRONMENT == 'staging' && params.DEPLOY_BRANCH == 'main') {
+                        echo "ℹ️  INFO: Deploying main branch to staging"
+                    }
+                }
+            }
+        }
+        
         stage('Checkout Code') {
             steps {
                 git branch: "${params.DEPLOY_BRANCH}", url: 'https://github.com/DavidHunterJS/fakebook-frontend.git'
@@ -29,8 +52,8 @@ pipeline {
                 script {
                     sh '''
                         echo "Backing up current Heroku configuration..."
-                        heroku config -a ${HEROKU_APP_NAME} --json > heroku-config-backup-$(date +%Y%m%d-%H%M%S).json || echo "No existing config to backup"
-                        echo "Current config backed up"
+                        heroku config -a ${HEROKU_APP_NAME} --json > heroku-config-backup-${DEPLOY_ENV}-$(date +%Y%m%d-%H%M%S).json || echo "No existing config to backup"
+                        echo "Current config backed up for ${DEPLOY_ENV}"
                     '''
                 }
             }
@@ -40,16 +63,42 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        rm -rf node_modules package-lock.json
-                        npm install --force
+                        # Only reinstall if package.json changed
+                        if [ ! -d "node_modules" ] || [ package.json -nt node_modules ]; then
+                            npm ci
+                        else
+                            echo "Using cached node_modules"
+                        fi
                         
                         # Configure git for the commit
-                        git config user.email "jenkins@your-domain.com"
+                        git config user.email "lazer@trippy.wtf"
                         git config user.name "Jenkins CI"
                         
                         # Add and commit the updated package-lock.json
                         git add package-lock.json
-                        git commit -m "Update package-lock.json for deployment [skip ci]" || echo "No changes to commit"
+                        git commit -m "Update package-lock.json for ${DEPLOY_ENV} deployment [skip ci]" || echo "No changes to commit"
+                    '''
+                }
+            }
+        }
+        
+        stage('Configure Environment') {
+            steps {
+                script {
+                    sh '''
+                        echo "Configuring for ${DEPLOY_ENV} environment..."
+                        
+                        # Set environment-specific API URL
+                        if [ "${DEPLOY_ENV}" = "staging" ]; then
+                            echo "NEXT_PUBLIC_API_URL=https://fakebook-backend-staging.herokuapp.com" > .env.production
+                            echo "NODE_ENV=staging" >> .env.production
+                        else
+                            echo "NEXT_PUBLIC_API_URL=https://fakebook-backend-a2a77a290552.herokuapp.com" > .env.production
+                            echo "NODE_ENV=production" >> .env.production
+                        fi
+                        
+                        echo "Environment configured for ${DEPLOY_ENV}"
+                        cat .env.production
                     '''
                 }
             }
@@ -66,21 +115,24 @@ pipeline {
         
         stage('Build Frontend') {
             steps {
-                sh 'npm run build'
+                sh '''
+                    echo "Building for ${DEPLOY_ENV}..."
+                    npm run build
+                '''
             }
         }
         
         stage('Deployment Approval') {
             when {
                 allOf {
-                    branch 'main'
+                    expression { params.ENVIRONMENT == 'production' }
                     expression { params.FORCE_DEPLOY == false }
                 }
             }
             steps {
                 script {
                     def userInput = input(
-                        message: 'Deploy to production?',
+                        message: "Deploy to PRODUCTION?",
                         ok: 'Deploy',
                         parameters: [
                             string(name: 'CONFIRMATION', defaultValue: '', description: 'Type "DEPLOY" to confirm production deployment')
@@ -96,7 +148,7 @@ pipeline {
         stage('Deploy to Heroku') {
             steps {
                 script {
-                    echo 'Deploying to Heroku...'
+                    echo "Deploying to ${DEPLOY_ENV}..."
                     sh '''
                         set -x
                         set -e
@@ -128,21 +180,25 @@ pipeline {
                         git config user.name "Jenkins CI"
                         
                         echo "Step 4: Tagging this deployment..."
-                        DEPLOY_TAG="deploy-$(date +%Y%m%d-%H%M%S)-${BUILD_NUMBER}"
-                        git tag -a "$DEPLOY_TAG" -m "Deployment ${BUILD_NUMBER} from ${DEPLOY_BRANCH} branch"
+                        DEPLOY_TAG="${DEPLOY_ENV}-deploy-$(date +%Y%m%d-%H%M%S)-${BUILD_NUMBER}"
+                        git tag -a "$DEPLOY_TAG" -m "${DEPLOY_ENV} deployment ${BUILD_NUMBER} from ${DEPLOY_BRANCH} branch"
                         
                         echo "Step 5: Adding Heroku remote..."
                         git remote add heroku https://heroku:$HEROKU_API_KEY@git.heroku.com/${HEROKU_APP_NAME}.git || \
                         git remote set-url heroku https://heroku:$HEROKU_API_KEY@git.heroku.com/${HEROKU_APP_NAME}.git
                         
-                        echo "Step 6: Deploying to Heroku..."
+                        echo "Step 6: Deploying to Heroku ${DEPLOY_ENV}..."
+                        # Add environment files to git temporarily for deployment
+                        git add .env.production
+                        git commit -m "Add ${DEPLOY_ENV} environment config [skip ci]" || echo "No env changes"
+                        
                         git push heroku HEAD:main --force
                         
                         echo "Step 7: Pushing deployment tag..."
                         git push heroku "$DEPLOY_TAG"
                         
                         echo "Step 8: Deployment complete!"
-                        echo "App should be available at: https://${HEROKU_APP_NAME}.herokuapp.com"
+                        echo "${DEPLOY_ENV} app should be available at: https://${HEROKU_APP_NAME}.herokuapp.com"
                         echo "Deployment tagged as: $DEPLOY_TAG"
                     '''
                 }
@@ -155,7 +211,7 @@ pipeline {
                     sh '''
                         echo "Getting actual app URL..."
                         APP_URL=$(heroku info -a ${HEROKU_APP_NAME} --json | grep web_url | cut -d '"' -f 4)
-                        echo "App URL: $APP_URL"
+                        echo "${DEPLOY_ENV} App URL: $APP_URL"
                         
                         echo "Waiting for app to be ready..."
                         sleep 30
@@ -164,16 +220,16 @@ pipeline {
                         HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL")
                         
                         if [ "$HTTP_STATUS" -eq 200 ]; then
-                            echo "✅ App is live and responding with status 200!"
-                            echo "Visit your app at: $APP_URL"
+                            echo "✅ ${DEPLOY_ENV} app is live and responding with status 200!"
+                            echo "Visit your ${DEPLOY_ENV} app at: $APP_URL"
                         else
-                            echo "⚠️  App returned status $HTTP_STATUS"
+                            echo "⚠️  ${DEPLOY_ENV} app returned status $HTTP_STATUS"
                             # Don't fail the build since the app is actually deployed
                             echo "Note: App may still be starting up. Check $APP_URL"
                         fi
                         
                         # Show app info
-                        echo "App info:"
+                        echo "${DEPLOY_ENV} app info:"
                         heroku info -a ${HEROKU_APP_NAME}
                     '''
                 }
@@ -183,7 +239,7 @@ pipeline {
     
     post {
         always {
-            echo 'Pipeline finished.'
+            echo "Pipeline finished for ${DEPLOY_ENV} environment."
             
             // Archive backup files
             archiveArtifacts artifacts: 'heroku-config-backup-*.json', allowEmptyArchive: true
@@ -191,24 +247,19 @@ pipeline {
         success {
             script {
                 sh """
-                APP_URL=\$(heroku info -a ${HEROKU_APP_NAME} --json | grep web_url | cut -d '"' -f 4 || echo "https://${HEROKU_APP_NAME}.herokuapp.com")
-                echo "✅ Pipeline succeeded! App deployed to Heroku from ${params.DEPLOY_BRANCH} branch."
-                echo "View app at: \$APP_URL"
-            """
+                    APP_URL=\$(heroku info -a ${HEROKU_APP_NAME} --json | grep web_url | cut -d '"' -f 4 || echo "https://${HEROKU_APP_NAME}.herokuapp.com")
+                    echo "✅ Pipeline succeeded!"
+                    echo "📍 Environment: ${DEPLOY_ENV}"
+                    echo "🌿 Branch: ${params.DEPLOY_BRANCH}"
+                    echo "🌐 URL: \$APP_URL"
+                """
             }
         }
         failure {
-            echo "❌ Pipeline failed! Check console for errors."
+            echo "❌ Pipeline failed for ${DEPLOY_ENV}!"
             echo "Branch: ${params.DEPLOY_BRANCH}"
             echo "Build: ${BUILD_NUMBER}"
-            
-            // Show recent Heroku logs on failure
-            script {
-                sh '''
-                    echo "Recent Heroku logs:"
-                    heroku logs --tail -n 100 -a ${HEROKU_APP_NAME} || true
-                '''
-            }
+            echo "Environment: ${DEPLOY_ENV}"
         }
     }
 }
