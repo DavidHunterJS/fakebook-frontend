@@ -326,7 +326,7 @@ pipeline {
                         
                         echo "Step 6: Deploying to Heroku ${DEPLOY_ENV}..."
                         # Add environment files to git temporarily for deployment
-                        git add .env.production
+                        git add -f .env.production
                         git commit -m "Add ${DEPLOY_ENV} environment config [skip ci]" || echo "No env changes"
                         
                         git push heroku HEAD:main --force
