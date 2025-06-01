@@ -376,7 +376,7 @@ pipeline {
                         
                         # Show recent logs for debugging
                         echo "Recent app logs:"
-                        heroku logs --tail -n 50 -a ${HEROKU_APP_NAME} || echo "Could not fetch logs"
+                        heroku logs -n 50 -a ${HEROKU_APP_NAME} --since "2 minutes ago" || echo "Could not fetch logs"
                     '''
                 }
             }
