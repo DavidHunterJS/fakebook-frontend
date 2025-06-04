@@ -237,7 +237,7 @@ const Header = () => {
             sx={{ display: { xs: 'none', sm: 'block' }, cursor: 'pointer' }}
             onClick={() => router.push('/')}
           >
-            Fakebook 🚧 Under Construction 🚧
+            Fakebook 🚧 Under MORE Construction 🚧
           </Typography>
           {isAuthenticated && user && (
             <>
