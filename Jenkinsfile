@@ -2,8 +2,8 @@ pipeline {
     agent any
     
     parameters {
-        choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'production'], description: 'Deploy to which environment?')
-        string(name: 'DEPLOY_BRANCH', defaultValue: 'develop', description: 'Branch to deploy') // Changed from ${env.BRANCH_NAME}
+        choice(name: 'ENVIRONMENT', choices: ['staging', 'production'], description: 'Deploy to which environment?')
+        string(name: 'DEPLOY_BRANCH', defaultValue: 'develop', description: 'Branch to deploy (supports feature branches)') // Changed from choice to string
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip running tests')
         booleanParam(name: 'FORCE_DEPLOY', defaultValue: false, description: 'Force deployment without approval')
         booleanParam(name: 'CREATE_FEATURE_APP', defaultValue: false, description: 'Create ephemeral Heroku app for feature branches')
@@ -44,10 +44,19 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 script {
-                    // Use the branch that triggered the build if available
-                    def branch = env.BRANCH_NAME ?: params.DEPLOY_BRANCH
-                    git branch: branch, url: 'https://github.com/DavidHunterJS/fakebook-frontend.git'
-                    echo "Checked out branch: ${branch}"
+                    // Get branch from webhook trigger or parameter
+                    def branch = env.GIT_BRANCH ?: params.DEPLOY_BRANCH
+                    
+                    // Clean up branch name (remove origin/ prefix if present)
+                    branch = branch.replaceAll('origin/', '')
+                    
+                    echo "Checking out branch: ${branch}"
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: branch]],
+                        extensions: [[$class: 'LocalBranch']],
+                        userRemoteConfigs: [[url: 'https://github.com/DavidHunterJS/fakebook-frontend.git']]
+                    ])
                 }
             }
         }
