@@ -3,8 +3,7 @@ pipeline {
     
     parameters {
         choice(name: 'ENVIRONMENT', choices: ['staging', 'production'], description: 'Deploy to which environment?')
-        string(name: 'DEPLOY_BRANCH', defaultValue: 'develop', description: 'Branch to deploy (supports feature branches)') // Changed from choice to string
-        booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip running tests')
+        string(name: 'DEPLOY_BRANCH', defaultValue: 'develop', description: 'Explicit branch name to deploy (e.g. feature/my-branch)')         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip running tests')
         booleanParam(name: 'FORCE_DEPLOY', defaultValue: false, description: 'Force deployment without approval')
         booleanParam(name: 'CREATE_FEATURE_APP', defaultValue: false, description: 'Create ephemeral Heroku app for feature branches')
     }
@@ -47,15 +46,22 @@ pipeline {
                     // Get branch from webhook trigger or parameter
                     def branch = env.GIT_BRANCH ?: params.DEPLOY_BRANCH
                     
-                    // Clean up branch name (remove origin/ prefix if present)
-                    branch = branch.replaceAll('origin/', '')
+                    // Fallback to develop if still not resolved
+                    branch = branch ?: 'develop'
                     
-                    echo "Checking out branch: ${branch}"
+                    // Clean branch name
+                    branch = branch.replaceAll('origin/', '').replaceAll('refs/heads/', '')
+                    
+                    echo "Resolved branch: ${branch}"
+                    
                     checkout([
                         $class: 'GitSCM',
                         branches: [[name: branch]],
                         extensions: [[$class: 'LocalBranch']],
-                        userRemoteConfigs: [[url: 'https://github.com/DavidHunterJS/fakebook-frontend.git']]
+                        userRemoteConfigs: [[
+                            url: 'https://github.com/DavidHunterJS/fakebook-frontend.git',
+                            credentialsId: 'your-github-credentials' // Add this line
+                        ]]
                     ])
                 }
             }
