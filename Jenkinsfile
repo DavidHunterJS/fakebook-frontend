@@ -2,8 +2,8 @@ pipeline {
     agent any
     
     parameters {
-        choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'production'], description: 'Deploy to which environment?')
-        string(name: 'DEPLOY_BRANCH', defaultValue: '${env.BRANCH_NAME}', description: 'Branch to deploy (e.g., main, develop, feature/user-auth)')
+        choice(name: 'ENVIRONMENT', choices: ['staging', 'production'], description: 'Deploy to which environment?')
+        choice(name: 'DEPLOY_BRANCH', choices: ['main', 'develop'], description: 'Branch to deploy')
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip running tests')
         booleanParam(name: 'FORCE_DEPLOY', defaultValue: false, description: 'Force deployment without approval')
         booleanParam(name: 'CREATE_FEATURE_APP', defaultValue: false, description: 'Create ephemeral Heroku app for feature branches')
@@ -80,8 +80,12 @@ pipeline {
         
         stage('Checkout Code') {
             steps {
-                git branch: "${params.DEPLOY_BRANCH}", url: 'https://github.com/DavidHunterJS/fakebook-frontend.git'
-                echo "Checked out branch: ${params.DEPLOY_BRANCH}"
+                script {
+                    // Use the branch that triggered the build if available
+                    def branch = env.BRANCH_NAME ?: params.DEPLOY_BRANCH
+                    git branch: branch, url: 'https://github.com/DavidHunterJS/fakebook-frontend.git'
+                    echo "Checked out branch: ${branch}"
+                }
             }
         }
         
