@@ -250,6 +250,9 @@ const Header = () => {
                   inputProps={{ 'aria-label': 'search' }}
                 />
               </Search>
+              <div className="under-construction-banner">
+                  🚧 Under Construction 🚧
+              </div>
               <Box sx={{ flexGrow: 1 }} />
               <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center' }}>
                 <Link href="/notifications" passHref legacyBehavior>

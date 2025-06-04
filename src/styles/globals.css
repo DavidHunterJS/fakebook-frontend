@@ -25,3 +25,22 @@ a {
 .hide-scrollbar::-webkit-scrollbar {
   display: none;  /* Chrome, Safari and Opera */
 }
+.under-construction-banner {
+  background-color: #ffe082; /* A noticeable but not too jarring yellow */
+  color: #333; /* Dark text for contrast */
+  text-align: center;
+  padding: 10px 5px;
+  font-size: 0.9em;
+  font-weight: bold;
+  width: 100%; /* Make it span the width if desired */
+  box-sizing: border-box; /* Ensures padding doesn't add to width */
+  /* You might need to adjust positioning (e.g., position: fixed, z-index)
+     if your header has complex layout or fixed positioning itself. */
+}
+
+/* Optional: If your header is fixed, ensure the banner is part of it
+   or positioned correctly relative to it.
+header.fixed .under-construction-banner {
+  position: relative; // Or adjust as needed
+}
+*/
