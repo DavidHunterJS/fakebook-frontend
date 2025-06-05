@@ -1,21 +1,70 @@
-    pipeline {
-        agent any
-        
-        parameters {
-            choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'production'],description: 'Deploy to which environment?')
-            string(name: 'DEPLOY_BRANCH',defaultValue: 'develop',description: 'Explicit branch name to deploy (e.g. feature/my-branch)')
-            booleanParam(name: 'SKIP_TESTS',defaultValue: false,description: 'Skip running tests')
-            booleanParam(name: 'FORCE_DEPLOY',defaultValue: false,description: 'Force deployment without approval')
-            booleanParam(name: 'CREATE_FEATURE_APP',defaultValue: false,description: 'Create ephemeral feature environment for feature branches')
+pipeline {
+    agent any
+    
+    parameters {
+        choice(name: 'ENVIRONMENT', choices: ['staging', 'production'], description: 'Deploy to which environment?')
+        string(name: 'DEPLOY_BRANCH', defaultValue: 'develop', description: 'Explicit branch name to deploy (e.g. feature/my-branch)')         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip running tests')
+        booleanParam(name: 'FORCE_DEPLOY', defaultValue: false, description: 'Force deployment without approval')
+        booleanParam(name: 'CREATE_FEATURE_APP', defaultValue: false, description: 'Create ephemeral Heroku app for feature branches')
+    }
+    
+    environment {
+        // Dynamic app name based on environment
+        HEROKU_APP_NAME = "${params.ENVIRONMENT == 'staging' ? 'fakebook-frontend-staging' : 'fakebook-frontend'}"
+        HEROKU_API_KEY = credentials('HEROKU_API_KEY')
+        // For CI/CD clarity
+        DEPLOY_ENV = "${params.ENVIRONMENT}"
+    }
+    
+    tools {
+        nodejs 'NodeJS_18_on_EC2'
+    }
+    
+    stages {
+        stage('Environment Info') {
+            steps {
+                echo "🎯 Deploying to: ${params.ENVIRONMENT}"
+                echo "📦 Heroku app: ${HEROKU_APP_NAME}"
+                echo "🌿 Branch: ${params.DEPLOY_BRANCH}"
+                echo "🔨 Build: ${BUILD_NUMBER}"
+                
+                // Validate branch/environment combination
+                script {
+                    if (params.ENVIRONMENT == 'production' && params.DEPLOY_BRANCH != 'main') {
+                        echo "⚠️  WARNING: Deploying non-main branch to production!"
+                    }
+                    if (params.ENVIRONMENT == 'staging' && params.DEPLOY_BRANCH == 'main') {
+                        echo "ℹ️  INFO: Deploying main branch to staging"
+                    }
+                }
+            }
         }
         
-        environment {
-            // Dynamic app name based on environment
-            BRANCH_NAME = "${env.GIT_BRANCH?.replaceFirst(/^origin\//, '') ?: 'main'}"
-            HEROKU_APP_NAME = "${params.ENVIRONMENT == 'production' ? 'fakebook-frontend' : 'fakebook-frontend-' + params.ENVIRONMENT}"
-            HEROKU_API_KEY = credentials('HEROKU_API_KEY')
-            DEPLOY_ENV = "${params.ENVIRONMENT}"
-            ORIGINAL_APP_NAME = "${HEROKU_APP_NAME}"
+        stage('Checkout Code') {
+            steps {
+                script {
+                    // Get branch from webhook trigger or parameter
+                    def branch = env.GIT_BRANCH ?: params.DEPLOY_BRANCH
+                    
+                    // Fallback to develop if still not resolved
+                    branch = branch ?: 'develop'
+                    
+                    // Clean branch name
+                    branch = branch.replaceAll('origin/', '').replaceAll('refs/heads/', '')
+                    
+                    echo "Resolved branch: ${branch}"
+                    
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: branch]],
+                        extensions: [[$class: 'LocalBranch']],
+                        userRemoteConfigs: [[
+                            url: 'https://github.com/DavidHunterJS/fakebook-frontend.git',
+                            credentialsId: 'your-github-credentials' // Add this line
+                        ]]
+                    ])
+                }
+            }
         }
         
         tools {
