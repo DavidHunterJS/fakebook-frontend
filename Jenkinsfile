@@ -209,17 +209,24 @@ pipeline {
         stage('Backup Current Config') {
             steps {
                 script {
-                    sh '''
-                        echo "Backing up current Heroku configuration for app: ${HEROKU_APP_NAME}..."
-                        # Using a dynamic filename for the backup
-                        BACKUP_FILE="heroku-config-backup-${HEROKU_APP_NAME}-$(date +%Y%m%d-%H%M%S).json"
-                        if heroku config -a ${HEROKU_APP_NAME} --json > "${BACKUP_FILE}"; then
-                            echo "Current config backed up to ${BACKUP_FILE} for app ${HEROKU_APP_NAME}"
-                            archiveArtifacts artifacts: "${BACKUP_FILE}", allowEmptyArchive: true
+                    // Define BACKUP_FILE as a Groovy variable first
+                    def backupFileName = "heroku-config-backup-${env.HEROKU_APP_NAME}-$(date +%Y%m%d-%H%M%S).json"
+                    
+                    sh """
+                        echo "Backing up current Heroku configuration for app: ${env.HEROKU_APP_NAME}..."
+                        # Using the Groovy variable in the shell script
+                        echo "Attempting to backup to: ${backupFileName}"
+                        if heroku config -a "${env.HEROKU_APP_NAME}" --json > "${backupFileName}"; then
+                            echo "Current config successfully backed up to ${backupFileName} for app ${env.HEROKU_APP_NAME}"
                         else
-                            echo "No existing config to backup for ${HEROKU_APP_NAME}, or app does not exist yet."
+                            echo "No existing config to backup for ${env.HEROKU_APP_NAME}, or app does not exist yet, or an error occurred."
+                            # Create an empty file if backup failed, so archiveArtifacts doesn't complain if allowEmptyArchive is false for some reason
+                            # Or handle this more gracefully depending on desired behavior
+                            touch "${backupFileName}" 
                         fi
-                    '''
+                    """
+                    // Call archiveArtifacts as a Pipeline step
+                    archiveArtifacts artifacts: backupFileName, allowEmptyArchive: true 
                 }
             }
         }
