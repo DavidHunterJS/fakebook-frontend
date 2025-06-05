@@ -24,44 +24,38 @@ pipeline {
         stage('Initialize') {
             steps {
                 script {
-                    // --- Reliable Branch Resolution ---
-                    def resolvedBranch = params.DEPLOY_BRANCH // Start with parameter (for manual builds)
-                    
-                    // If the DEPLOY_BRANCH parameter is still its default (e.g. 'develop') or was not effectively set for a triggered build,
-                    // try to get the branch from SCM variables injected by Jenkins/plugins.
-                    if (params.DEPLOY_BRANCH == 'develop' || params.DEPLOY_BRANCH == null || params.DEPLOY_BRANCH.trim().isEmpty()) { // Check if it's default or effectively empty
-                        if (env.GIT_BRANCH) { // env.GIT_BRANCH is often set by Git plugin from webhook (e.g., origin/feature/foo)
-                            resolvedBranch = env.GIT_BRANCH
-                        } else if (env.BRANCH_NAME) { // env.BRANCH_NAME is often set by Multibranch pipelines or some Git plugins
-                            resolvedBranch = env.BRANCH_NAME
-                        } else {
-                            // Fallback for safety if SCM variables aren't populated as expected.
-                            // For manual "Build with Parameters" without changing DEPLOY_BRANCH, it will use the default from params.
-                            echo "No SCM branch environment variable (GIT_BRANCH, BRANCH_NAME) found, or DEPLOY_BRANCH param was intentionally '${params.DEPLOY_BRANCH}'."
-                            // If params.DEPLOY_BRANCH was 'develop', it stays 'develop'.
-                        }
-                    }
-                    
-                    // Clean up common prefixes from the branch name
-                    resolvedBranch = resolvedBranch.replaceFirst(/^origin\//, '')
-                                           .replaceFirst(/^refs\/heads\//, '')
-                                           .replaceFirst(/^refs\/remotes\/origin\//, '')
-                    
-                    env.RESOLVED_BRANCH = resolvedBranch
-                    env.DEPLOY_BRANCH = resolvedBranch // Keep this for any scripts that might still use it directly
-
+                    // ... (your existing branch resolution logic to set env.RESOLVED_BRANCH) ...
                     echo "✅ Resolved branch for this build: ${env.RESOLVED_BRANCH}"
 
-                    // --- Dynamic Heroku App Name Setup ---
-                    env.ORIGINAL_APP_NAME = "${params.ENVIRONMENT == 'production' ? 'fakebook-frontend' : 'fakebook-frontend-' + params.ENVIRONMENT}"
-                    env.HEROKU_APP_NAME = env.ORIGINAL_APP_NAME // Default to original
+                    // --- Determine DEPLOY_ENV based on resolved branch if webhook triggered ---
+                    // For webhook triggers, params.ENVIRONMENT will be its default ('dev')
+                    // We want to override it based on the actual branch for standard flows.
+                    def determinedEnv = params.ENVIRONMENT // Start with parameter default
+                    if (env.RESOLVED_BRANCH == 'main' || env.RESOLVED_BRANCH == 'master') {
+                        determinedEnv = 'production'
+                    } else if (env.RESOLVED_BRANCH == 'develop') {
+                        determinedEnv = 'staging' // Or 'dev', depending on your flow for develop
+                    } else if (env.RESOLVED_BRANCH.startsWith('feature/')) {
+                        determinedEnv = 'dev'
+                    }
+                    // If it was a manual build and user selected something else, that will take precedence
+                    // if params.ENVIRONMENT was not 'dev' (the default).
+                    // This logic primarily helps set the right env for webhook-triggered builds.
 
-                    if (env.RESOLVED_BRANCH.startsWith('feature/') && params.CREATE_FEATURE_APP == true && params.ENVIRONMENT == 'dev') {
+                    env.DEPLOY_ENV = determinedEnv // Update DEPLOY_ENV
+
+                    // --- Dynamic Heroku App Name Setup ---
+                    env.ORIGINAL_APP_NAME = (determinedEnv == 'production' ? 
+                                                'fakebook-frontend' : 
+                                                "fakebook-frontend-${determinedEnv}")
+                    env.HEROKU_APP_NAME = env.ORIGINAL_APP_NAME 
+
+                    if (env.RESOLVED_BRANCH.startsWith('feature/') && params.CREATE_FEATURE_APP == true && determinedEnv == 'dev') {
                         def featureNameSanitized = env.RESOLVED_BRANCH.replace('feature/', '').replaceAll('[^a-zA-Z0-9-]', '-').toLowerCase()
-                        env.HEROKU_APP_NAME = "fakebook-ft-${featureNameSanitized}".take(30) // Heroku app names have a 30 char limit
+                        env.HEROKU_APP_NAME = "fakebook-ft-${featureNameSanitized}".take(30)
                         echo "ℹ️  Feature branch will target dynamically named Heroku app: ${env.HEROKU_APP_NAME}"
                     } else {
-                        echo "ℹ️  Branch will target standard Heroku app: ${env.HEROKU_APP_NAME} for environment ${params.ENVIRONMENT}"
+                        echo "ℹ️  Branch will target Heroku app: ${env.HEROKU_APP_NAME} for environment ${determinedEnv}"
                     }
                 }
             }
