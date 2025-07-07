@@ -39,6 +39,7 @@ interface AuthState {
 }
 
 type AuthAction =
+    { type: 'LOADING' } 
   | { type: 'LOGIN_SUCCESS'; payload: { user: User | Record<string, unknown>; token: string } }
   | { type: 'REGISTER_SUCCESS'; payload: { user: User | Record<string, unknown>; token: string } }
   | { type: 'USER_LOADED'; payload: { user: User | Record<string, unknown>; token: string } }
@@ -49,7 +50,7 @@ type AuthAction =
   | { type: 'PROFILE_UPDATED'; payload: { user: Partial<User> } }; // For profile updates
 
 interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   register: (firstName:string, lastName:string, username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   updateUserInContext: (updatedUserData: Partial<User>) => void; // To update user after profile edit
@@ -65,7 +66,12 @@ const initialState: AuthState = {
 
 const AuthContext = createContext<AuthContextType>({
   ...initialState,
-  login: async () => {},
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    login: async (email: string, password: string) => {
+    // This default implementation will never be called, but it needs to match the type.
+    // Returning a rejected promise is a common pattern for this.
+    return Promise.reject(new Error('Login function not yet initialized.'));
+  },
   register: async () => {},
   logout: () => {},
   updateUserInContext: () => {},
@@ -73,6 +79,12 @@ const AuthContext = createContext<AuthContextType>({
 
 const authReducer = (state: AuthState, action: AuthAction): AuthState => {
   switch (action.type) {
+    case 'LOADING':
+      return {
+        ...state,
+        loading: true,
+        error: null,
+      };
     case 'USER_LOADED':
       return {
         ...state,
@@ -204,6 +216,7 @@ export const AuthProvider: FC<{children: ReactNode}> = ({ children }) => {
   };
 
   const login = async (email: string, password: string) => {
+    dispatch({ type: 'LOADING' });
     try {
       const res = await axiosInstance.post('/auth/login', { email, password });
       
@@ -219,15 +232,7 @@ export const AuthProvider: FC<{children: ReactNode}> = ({ children }) => {
         payload: res.data,
       });
       
-      // Force a full page reload after login
-      if (typeof window !== 'undefined') {
-        // Small delay to ensure state is saved
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 100);
-      }
-      
-      return res.data;
+      return res.data.user;
     } catch (err: unknown) {
       const errorMessage = extractErrorMessage(err);
       dispatch({ type: 'LOGIN_FAIL', payload: errorMessage });

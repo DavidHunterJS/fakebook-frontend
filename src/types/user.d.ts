@@ -14,4 +14,7 @@ export interface User {
   createdAt?: string;
   updatedAt?: string;
   location?: string;
+  role?: string;
+  isActive?: boolean;
+  friends?: string[];
 }

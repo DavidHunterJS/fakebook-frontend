@@ -14,9 +14,8 @@ const validationSchema = Yup.object({
 });
 
 const LoginForm = () => {
-  const { login, error, loading } = useAuth();
+  const { login, error } = useAuth();
 
-  // Filter out the "No token found" error on the login page
   const displayError = error && error !== 'No token found.' ? error : '';
 
   const formik = useFormik({
@@ -25,8 +24,22 @@ const LoginForm = () => {
       password: '',
     },
     validationSchema,
-    onSubmit: async (values) => {
-      await login(values.email, values.password);
+    onSubmit: async (values, { setSubmitting }) => {
+      try {
+        // ✅ 3. Capture the user object returned from the login function
+        const user = await login(values.email, values.password);
+
+        // ✅ This logic now uses window.location.assign
+        if (user && user.role === 'admin') {
+          window.location.assign('/admin'); // Force a full page load to the admin dashboard
+        } else {
+          window.location.assign('/dashboard'); // Force a full page load to the regular dashboard
+        }
+      } catch (err) {
+        // The error will be caught and displayed by the 'displayError' variable
+        console.error("Login failed on form submission:", err);
+        setSubmitting(false);
+      }
     },
   });
 
@@ -65,10 +78,10 @@ const LoginForm = () => {
         variant="contained"
         fullWidth
         type="submit"
-        disabled={loading}
+        disabled={formik.isSubmitting} // Use formik's submitting state
         sx={{ mt: 3, mb: 2 }}
       >
-        {loading ? 'Logging in...' : 'Login'}
+        {formik.isSubmitting ? 'Logging in...' : 'Login'}
       </Button>
     </Box>
   );
