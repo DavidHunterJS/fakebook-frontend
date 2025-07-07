@@ -3,21 +3,19 @@ pipeline {
     
     parameters {
         choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'production'], description: 'Deploy to which environment?')
-        string(name: 'DEPLOY_BRANCH', defaultValue: 'develop', description: 'Explicit branch name to deploy (e.g. feature/my-branch)')
+        string(name: 'DEPLOY_BRANCH', defaultValue: 'develop', description: 'Explicit branch name to deploy (e.g. feature/my-branch). For webhook triggers, this is usually overridden.')
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip running tests')
         booleanParam(name: 'FORCE_DEPLOY', defaultValue: false, description: 'Force deployment without approval')
         booleanParam(name: 'CREATE_FEATURE_APP', defaultValue: false, description: 'Create ephemeral Heroku app for feature branches')
     }
     
     environment {
-        HEROKU_API_KEY = credentials('HEROKU_API_KEY') // Ensure this credential ID is correct in Jenkins
-        DEPLOY_ENV = "${params.ENVIRONMENT}"
-        // ORIGINAL_APP_NAME and HEROKU_APP_NAME will be fully defined in Initialize stage
-        // BRANCH_NAME also superseded by RESOLVED_BRANCH from Initialize stage
+        HEROKU_API_KEY = credentials('HEROKU_API_KEY') 
+        // DEPLOY_ENV, HEROKU_APP_NAME, ORIGINAL_APP_NAME, RESOLVED_BRANCH will be set in Initialize
     }
     
     tools {
-        nodejs 'NodeJS_18_on_EC2' // Ensure this Node.js installation is configured in Jenkins Global Tool Configuration
+        nodejs 'NodeJS_18_on_EC2' 
     }
     
     stages {
@@ -25,67 +23,93 @@ pipeline {
             steps {
                 script {
                     // --- Reliable Branch Resolution ---
-                    def resolvedBranch = params.DEPLOY_BRANCH // Start with parameter (for manual builds)
+                    def resolvedBranchName = params.DEPLOY_BRANCH 
                     
-                    // If the DEPLOY_BRANCH parameter is still its default (e.g. 'develop') or was not effectively set for a triggered build,
-                    // try to get the branch from SCM variables injected by Jenkins/plugins.
-                    if (params.DEPLOY_BRANCH == 'develop' || params.DEPLOY_BRANCH == null || params.DEPLOY_BRANCH.trim().isEmpty()) { // Check if it's default or effectively empty
-                        if (env.GIT_BRANCH) { // env.GIT_BRANCH is often set by Git plugin from webhook (e.g., origin/feature/foo)
-                            resolvedBranch = env.GIT_BRANCH
-                        } else if (env.BRANCH_NAME) { // env.BRANCH_NAME is often set by Multibranch pipelines or some Git plugins
-                            resolvedBranch = env.BRANCH_NAME
+                    if (env.GIT_BRANCH) { 
+                        resolvedBranchName = env.GIT_BRANCH
+                    } else if (env.BRANCH_NAME) { 
+                        resolvedBranchName = env.BRANCH_NAME
+                    } else if (params.DEPLOY_BRANCH == 'develop') {
+                        echo "GIT_BRANCH and BRANCH_NAME env vars not found. Trying 'git branch --show-current'."
+                        def gitCurrentBranchInWorkspace = sh(script: 'git branch --show-current 2>/dev/null', returnStdout: true).trim()
+                        if (gitCurrentBranchInWorkspace) {
+                            resolvedBranchName = gitCurrentBranchInWorkspace 
+                            echo "Using branch from workspace: ${resolvedBranchName}"
                         } else {
-                            // Fallback for safety if SCM variables aren't populated as expected.
-                            // For manual "Build with Parameters" without changing DEPLOY_BRANCH, it will use the default from params.
-                            echo "No SCM branch environment variable (GIT_BRANCH, BRANCH_NAME) found, or DEPLOY_BRANCH param was intentionally '${params.DEPLOY_BRANCH}'."
-                            // If params.DEPLOY_BRANCH was 'develop', it stays 'develop'.
+                           echo "Could not determine branch from git command. Using DEPLOY_BRANCH parameter: ${params.DEPLOY_BRANCH}."
+                           resolvedBranchName = params.DEPLOY_BRANCH
                         }
                     }
                     
-                    // Clean up common prefixes from the branch name
-                    resolvedBranch = resolvedBranch.replaceFirst(/^origin\//, '')
-                                           .replaceFirst(/^refs\/heads\//, '')
-                                           .replaceFirst(/^refs\/remotes\/origin\//, '')
+                    if (resolvedBranchName) {
+                        resolvedBranchName = resolvedBranchName.replaceFirst(/^origin\//, '')
+                                               .replaceFirst(/^refs\/heads\//, '')
+                                               .replaceFirst(/^refs\/remotes\/origin\//, '')
+                    } else {
+                        echo "⚠️ WARNING: Could not determine actual pushed branch name, defaulting to 'develop'."
+                        resolvedBranchName = 'develop' 
+                    }
                     
-                    env.RESOLVED_BRANCH = resolvedBranch
-                    env.DEPLOY_BRANCH = resolvedBranch // Keep this for any scripts that might still use it directly
+                    env.RESOLVED_BRANCH = resolvedBranchName
+                    env.DEPLOY_BRANCH = resolvedBranchName 
 
                     echo "✅ Resolved branch for this build: ${env.RESOLVED_BRANCH}"
 
-                    // --- Dynamic Heroku App Name Setup ---
-                    env.ORIGINAL_APP_NAME = "${params.ENVIRONMENT == 'production' ? 'fakebook-frontend' : 'fakebook-frontend-' + params.ENVIRONMENT}"
-                    env.HEROKU_APP_NAME = env.ORIGINAL_APP_NAME // Default to original
+                    // --- Determine DEPLOY_ENV and HEROKU_APP_NAME based on RESOLVED_BRANCH ---
+                    def determinedEnv = params.ENVIRONMENT // Start with parameter default (usually 'dev' for webhook)
 
-                    if (env.RESOLVED_BRANCH.startsWith('feature/') && params.CREATE_FEATURE_APP == true && params.ENVIRONMENT == 'dev') {
+                    if (env.RESOLVED_BRANCH == 'main' || env.RESOLVED_BRANCH == 'master') {
+                        determinedEnv = 'production' // Force to production if main/master branch
+                    } else if (env.RESOLVED_BRANCH == 'develop') {
+                        determinedEnv = 'staging'    // Develop deploys to staging
+                    } else if (env.RESOLVED_BRANCH.startsWith('feature/')) {
+                        determinedEnv = 'dev'        // Features deploy to dev
+                    }
+                    // If params.ENVIRONMENT was manually set to something specific, this logic might
+                    // need adjustment if manual selection should always override branch-based logic.
+                    // For now, branch-based logic takes precedence for main/develop/feature.
+
+                    env.DEPLOY_ENV = determinedEnv
+                    
+                    if (determinedEnv == 'production') {
+                        env.HEROKU_APP_NAME = 'fakebook-frontend' // Your actual production app name
+                    } else {
+                        env.HEROKU_APP_NAME = "fakebook-frontend-${determinedEnv}"
+                    }
+                    env.ORIGINAL_APP_NAME = env.HEROKU_APP_NAME // Base for feature apps
+
+                    echo "ℹ️  Environment set to: ${env.DEPLOY_ENV}"
+                    echo "ℹ️  Target Heroku app initially: ${env.HEROKU_APP_NAME}"
+
+                    if (env.RESOLVED_BRANCH != null && env.RESOLVED_BRANCH.startsWith('feature/') && params.CREATE_FEATURE_APP == true && env.DEPLOY_ENV == 'dev') {
                         def featureNameSanitized = env.RESOLVED_BRANCH.replace('feature/', '').replaceAll('[^a-zA-Z0-9-]', '-').toLowerCase()
-                        env.HEROKU_APP_NAME = "fakebook-ft-${featureNameSanitized}".take(30) // Heroku app names have a 30 char limit
+                        env.HEROKU_APP_NAME = "fakebook-ft-${featureNameSanitized}".take(30)
                         echo "ℹ️  Feature branch will target dynamically named Heroku app: ${env.HEROKU_APP_NAME}"
                     } else {
-                        echo "ℹ️  Branch will target standard Heroku app: ${env.HEROKU_APP_NAME} for environment ${params.ENVIRONMENT}"
+                        echo "ℹ️  Build will target standard Heroku app: ${env.HEROKU_APP_NAME} for environment ${env.DEPLOY_ENV}"
                     }
                 }
             }
         }
         
+        // ... [Rest of your stages: Environment Info, Validate GitFlow Rules, Checkout Code, etc.] ...
+        // Ensure they use env.RESOLVED_BRANCH and env.HEROKU_APP_NAME, env.DEPLOY_ENV as set in Initialize.
+
         stage('Environment Info') {
             steps {
                 script {
-                    echo "🎯 Deploying to: ${params.ENVIRONMENT}"
+                    echo "🎯 Deploying to: ${env.DEPLOY_ENV}" // Use env.DEPLOY_ENV
                     echo "📦 Heroku app: ${env.HEROKU_APP_NAME}"
                     echo "🌿 Branch: ${env.RESOLVED_BRANCH}"
                     echo "🔨 Build: ${BUILD_NUMBER}"
                     
                     def branch = env.RESOLVED_BRANCH
-                    if (branch.startsWith('feature/')) {
+                    if (branch != null && branch.startsWith('feature/')) {
                         echo "🚀 Feature branch deployment"
-                    } else if (branch.startsWith('release/')) {
-                        echo "📦 Release branch deployment"
-                    } else if (branch.startsWith('hotfix/')) {
-                        echo "🔥 Hotfix branch deployment"
                     } else if (branch == 'develop') {
-                        echo "🔧 Development branch deployment"
+                        echo "🔧 Development branch deployment (to Staging)"
                     } else if (branch == 'main' || branch == 'master') {
-                        echo "🏭 Production branch deployment"
+                        echo "🏭 Production branch deployment (to Production)"
                     } else {
                         echo "📌 Custom branch deployment: ${branch}"
                     }
@@ -97,41 +121,56 @@ pipeline {
             steps {
                 script {
                     def branch = env.RESOLVED_BRANCH
-                    def env_param = params.ENVIRONMENT
+                    def current_env = env.DEPLOY_ENV // Use the environment determined by Initialize
                     
-                    if (env_param == 'production') {
+                    if (branch == null) {
+                        error("❌ Critical Error: Resolved branch is null, cannot validate GitFlow rules.")
+                    }
+
+                    if (current_env == 'production') {
                         if (!branch.matches('main|master|hotfix/.*|release/.*')) {
                             error("❌ Production can only be deployed from main, release/*, or hotfix/* branches. Branch was: ${branch}")
                         }
-                    } else if (env_param == 'staging') {
+                    } else if (current_env == 'staging') {
                         if (!branch.matches('develop|release/.*|hotfix/.*')) {
-                            if (!params.FORCE_DEPLOY) {
+                            if (!params.FORCE_DEPLOY) { // FORCE_DEPLOY still comes from parameters
                                 error("❌ Staging typically deploys from develop, release/*, or hotfix/* branches. Use FORCE_DEPLOY to override. Branch was: ${branch}")
                             } else {
                                 echo "⚠️  WARNING: Force deploying ${branch} to staging"
                             }
                         }
-                    } else if (env_param == 'dev') {
+                    } else if (current_env == 'dev') {
                         echo "✅ Dev environment accepts all branches (currently: ${branch})"
                     }
                     
-                    echo "✅ GitFlow validation passed: ${branch} → ${env_param}"
+                    echo "✅ GitFlow validation passed: ${branch} → ${current_env}"
                 }
             }
         }   
         
-        stage('Checkout Code') {
-            steps {
-                echo "✅ Code for branch '${env.RESOLVED_BRANCH}' should already be checked out in workspace: ${env.WORKSPACE}"
-                sh "echo 'Current git branch in workspace:'; git branch --show-current || git symbolic-ref --short HEAD"
+        stage('Checkout Code') { // This primarily verifies what Jenkins' main SCM checkout did
+             steps {
+                script {
+                    echo "✅ Verifying code for branch '${env.RESOLVED_BRANCH}' in workspace: ${env.WORKSPACE}"
+                    sh """
+                       echo "Current git branch in workspace (should match RESOLVED_BRANCH if UI SCM is correct):"
+                       git branch --show-current || git symbolic-ref --short HEAD || echo "Detached HEAD or could not determine branch"
+                       echo "Last commit in workspace:"
+                       git log -1 --oneline
+                    """
+                }
             }
         }
         
         stage('GitFlow Compliance Check') {
-            steps {
+             steps {
                 script {
                     def branch = env.RESOLVED_BRANCH
-                    
+                    if (branch == null) {
+                        echo "⚠️ Skipping GitFlow Compliance Check as resolved branch is null."
+                        return 
+                    }
+                    // ... (rest of your GitFlow Compliance logic using 'branch') ...
                     if (branch.startsWith('feature/')) {
                         sh """
                             git fetch origin develop --depth=100000 || echo "Could not fetch develop, proceeding with caution"
@@ -147,8 +186,8 @@ pipeline {
                             git fetch origin main --depth=100000 || echo "Could not fetch main, proceeding with caution"
                             if ! git merge-base --is-ancestor origin/main HEAD; then
                                 echo "❌ Error: Hotfix branch '${branch}' must be based on 'origin/main'."
-                                currentBuild.result = 'FAILURE' // Mark build as failed
-                                exit 1 // Exit shell script with error
+                                currentBuild.result = 'FAILURE' 
+                                exit 1 
                             else
                                 echo "✅ Hotfix branch '${branch}' correctly based on 'origin/main'"
                             fi
@@ -171,9 +210,9 @@ pipeline {
         stage('Create Feature Environment') {
             when {
                 allOf {
-                    expression { env.RESOLVED_BRANCH.startsWith('feature/') }
+                    expression { env.RESOLVED_BRANCH != null && env.RESOLVED_BRANCH.startsWith('feature/') }
                     expression { params.CREATE_FEATURE_APP == true }
-                    expression { params.ENVIRONMENT == 'dev' }
+                    expression { env.DEPLOY_ENV == 'dev' } // Tied to the determined DEPLOY_ENV
                 }
             }
             steps {
@@ -181,14 +220,12 @@ pipeline {
                     // HEROKU_APP_NAME for feature app is already set in Initialize stage
                     sh """
                         echo "Managing ephemeral app for feature branch: ${env.HEROKU_APP_NAME}"
-                        
                         if ! heroku apps:info -a "${env.HEROKU_APP_NAME}" &> /dev/null; then
                             echo "Creating new feature Heroku app: ${env.HEROKU_APP_NAME}"
                             heroku create "${env.HEROKU_APP_NAME}" || echo "App creation failed - may already exist or name conflict."
                         else
                             echo "ℹ️  Feature app '${env.HEROKU_APP_NAME}' already exists."
                         fi
-                        
                         heroku config:set APP_TYPE=feature FEATURE_BRANCH="${env.RESOLVED_BRANCH}" -a "${env.HEROKU_APP_NAME}"
                         echo "✅ Feature app '${env.HEROKU_APP_NAME}' tagged."
                     """
@@ -199,23 +236,19 @@ pipeline {
         stage('Backup Current Config') {
             steps {
                 script {
-                    // Use Groovy for date formatting to avoid shell interpolation issues in file name definition
                     def GStringSafeDate = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date())
                     def backupFileName = "heroku-config-backup-${env.HEROKU_APP_NAME}-${GStringSafeDate}.json"
                     
                     sh """
                         echo "Backing up current Heroku configuration for app: ${env.HEROKU_APP_NAME}..."
                         echo "Attempting to backup to: ${backupFileName}"
-                        # Use quotes around backupFileName in case app name has spaces (though unlikely for Heroku)
                         if heroku config -a "${env.HEROKU_APP_NAME}" --json > "${backupFileName}"; then
                             echo "Current config successfully backed up to ${backupFileName} for app ${env.HEROKU_APP_NAME}"
                         else
                             echo "No existing config to backup for ${env.HEROKU_APP_NAME}, or app does not exist yet, or an error occurred."
-                            # Create an empty file if backup failed, so archiveArtifacts doesn't complain
                             touch "${backupFileName}" 
                         fi
                     """
-                    // Call archiveArtifacts as a Pipeline step, using the Groovy variable
                     archiveArtifacts artifacts: backupFileName, allowEmptyArchive: true 
                 }
             }
@@ -237,7 +270,6 @@ pipeline {
                             echo "package-lock.json not found, using npm install"
                             npm install
                         fi
-                        
                         git config user.email "ci-builder@jenkins.invalid"
                         git config user.name "Jenkins CI"
                     '''
@@ -253,13 +285,13 @@ pipeline {
                         echo "TARGET_API_URL based on DEPLOY_ENV: ${DEPLOY_ENV}"
 
                         if [ "${DEPLOY_ENV}" = "production" ]; then
-                            TARGET_API_URL="https://fakebook-backend-a2a77a290552.herokuapp.com/api"
+                            TARGET_API_URL="https://fakebook-backend-a2a77a290552.herokuapp.com/api" # PROD BACKEND
                             CURRENT_NODE_ENV="production"
                         elif [ "${DEPLOY_ENV}" = "staging" ]; then
-                            TARGET_API_URL="https://fakebook-backend-staging.herokuapp.com/api"
-                            CURRENT_NODE_ENV="staging" 
+                            TARGET_API_URL="https://fakebook-backend-staging.herokuapp.com/api" # STAGING BACKEND
+                            CURRENT_NODE_ENV="production" # Staging often uses production-like build
                         else # dev
-                            TARGET_API_URL="https://fakebook-backend-dev.herokuapp.com/api"
+                            TARGET_API_URL="https://fakebook-backend-dev.herokuapp.com/api" # DEV BACKEND
                             CURRENT_NODE_ENV="development"
                         fi
                         
@@ -279,43 +311,37 @@ pipeline {
         }
         
         stage('Run Tests') {
-            when {
-                expression { params.SKIP_TESTS == false }
-            }
-            steps {
-                sh 'npm test'
-            }
+            when { expression { params.SKIP_TESTS == false } }
+            steps { sh 'npm test' }
         }
         
         stage('Build Frontend') {
-            steps {
-                sh '''
-                    echo "Building frontend for ${DEPLOY_ENV}..."
-                    npm run build
-                '''
-            }
+            steps { sh 'echo "Building frontend for ${DEPLOY_ENV}..."; npm run build' }
         }
         
         stage('Deployment Approval') {
             when {
                 anyOf {
                     allOf {
-                        expression { params.ENVIRONMENT == 'production' }
+                        expression { env.DEPLOY_ENV == 'production' } // Use determined DEPLOY_ENV
                         expression { params.FORCE_DEPLOY == false }
                     }
                     allOf {
-                        expression { env.RESOLVED_BRANCH.startsWith('hotfix/') }
+                        expression { env.RESOLVED_BRANCH != null && env.RESOLVED_BRANCH.startsWith('hotfix/') } 
                         expression { params.FORCE_DEPLOY == false }
                     }
                 }
             }
             steps {
-                script {
-                    def message = "Deploy branch '${env.RESOLVED_BRANCH}' to ${params.ENVIRONMENT.toUpperCase()} environment?"
-                    if (params.ENVIRONMENT == 'production' || env.RESOLVED_BRANCH.startsWith('hotfix/')) {
-                         message = params.ENVIRONMENT == 'production' ? 
-                            "Deploy branch '${env.RESOLVED_BRANCH}' to PRODUCTION?" : 
-                            "Deploy HOTFIX branch '${env.RESOLVED_BRANCH}' to ${params.ENVIRONMENT.toUpperCase()}?"
+                 script {
+                    def branchForMessage = env.RESOLVED_BRANCH ?: "unknown branch"
+                    def current_env_for_message = env.DEPLOY_ENV.toUpperCase()
+                    def message = "Deploy branch '${branchForMessage}' to ${current_env_for_message} environment?"
+                    
+                    if (env.DEPLOY_ENV == 'production' || (env.RESOLVED_BRANCH != null && env.RESOLVED_BRANCH.startsWith('hotfix/'))) {
+                         message = env.DEPLOY_ENV == 'production' ? 
+                            "Deploy branch '${branchForMessage}' to PRODUCTION?" : 
+                            "Deploy HOTFIX branch '${branchForMessage}' to ${current_env_for_message}?"
                     }
                     
                     def userInput = input(
@@ -331,12 +357,13 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Deploy to Heroku') {
             steps {
                 script {
-                    echo "Deploying branch '${env.RESOLVED_BRANCH}' to Heroku app '${env.HEROKU_APP_NAME}' (${DEPLOY_ENV})..."
+                    echo "Deploying branch '${env.RESOLVED_BRANCH}' to Heroku app '${env.HEROKU_APP_NAME}' (${env.DEPLOY_ENV})..."
                     sh '''
+                        # ... (your existing deploy script, ensure it uses env.HEROKU_APP_NAME and env.RESOLVED_BRANCH) ...
                         set -x 
                         set -e 
                         
@@ -365,7 +392,6 @@ pipeline {
                         
                         echo "Step 4: Creating deployment tag..."
                         BRANCH_SAFE=$(echo "${RESOLVED_BRANCH}" | tr '/' '-' | sed 's/[^a-zA-Z0-9-]//g')
-                        # Use Groovy for date formatting to ensure consistency
                         DEPLOY_TAG_DATE_PART=$(date +%Y%m%d-%H%M%S) 
                         DEPLOY_TAG="${DEPLOY_ENV}-deploy-${DEPLOY_TAG_DATE_PART}-b${BUILD_NUMBER}-${BRANCH_SAFE}"
                         git tag -a "$DEPLOY_TAG" -m "Deployment to ${DEPLOY_ENV} from branch ${RESOLVED_BRANCH}, build ${BUILD_NUMBER}"
@@ -408,6 +434,7 @@ pipeline {
             steps {
                 script {
                     sh '''
+                        # ... (your existing verify script, ensure it uses env.HEROKU_APP_NAME and env.DEPLOY_ENV) ...
                         echo "Verifying deployment of ${HEROKU_APP_NAME}..."
                         sleep 45 
                         
@@ -419,9 +446,8 @@ pipeline {
                         echo "${DEPLOY_ENV} App URL: $APP_URL"
                         
                         echo "Attempting to reach the app..."
-                        HTTP_STATUS="000" # Default to error
+                        HTTP_STATUS="000" 
                         for i in 1 2 3; do
-                            # Ensure APP_URL is quoted if it might contain special chars, though unlikely for Heroku URLs
                             HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 20 "$APP_URL")
                             echo "Attempt $i: Status $HTTP_STATUS for $APP_URL"
                             if [ "$HTTP_STATUS" -eq 200 ]; then
@@ -448,7 +474,7 @@ pipeline {
         
         stage('Post-Deployment Tasks') {
             when {
-                expression { env.RESOLVED_BRANCH.startsWith('release/') && params.ENVIRONMENT == 'staging' }
+                expression { env.RESOLVED_BRANCH != null && env.RESOLVED_BRANCH.startsWith('release/') && env.DEPLOY_ENV == 'staging' }
             }
             steps {
                 echo "📋 Release branch '${env.RESOLVED_BRANCH}' deployed to staging. Ready for QA."
@@ -458,26 +484,26 @@ pipeline {
     
     post {
         always {
-            echo "Pipeline finished for ${DEPLOY_ENV} environment, branch ${env.RESOLVED_BRANCH}."
-            // archiveArtifacts was moved into the 'Backup Current Config' stage
+            echo "Pipeline finished for ${env.DEPLOY_ENV} environment, branch ${env.RESOLVED_BRANCH ?: 'unknown'}."
+            // Removed archiveArtifacts from here as it's better placed after backup file creation
         }
         success {
             script {
                 sh """
                     APP_URL=\$(heroku info -a "${HEROKU_APP_NAME}" --json | grep web_url | cut -d '"' -f 4 || echo "https://${HEROKU_APP_NAME}.herokuapp.com")
                     echo "✅ Pipeline succeeded!"
-                    echo "📍 Environment: ${DEPLOY_ENV}"
-                    echo "🌿 Branch: ${env.RESOLVED_BRANCH}"
+                    echo "📍 Environment: ${env.DEPLOY_ENV}"
+                    echo "🌿 Branch: ${env.RESOLVED_BRANCH ?: 'unknown'}"
                     echo "🌐 URL: \$APP_URL"
-                    echo "🏷️  App Name: ${HEROKU_APP_NAME}"
+                    echo "🏷️  App Name: ${env.HEROKU_APP_NAME}"
                 """
             }
         }
         failure {
-            echo "❌ Pipeline failed for ${DEPLOY_ENV}!"
+            echo "❌ Pipeline failed for ${env.DEPLOY_ENV}!"
             echo "Branch: ${env.RESOLVED_BRANCH ?: 'unknown'}" 
             echo "Build: ${BUILD_NUMBER}"
-            echo "Environment: ${DEPLOY_ENV}"
+            echo "Environment: ${env.DEPLOY_ENV}" // Use env.DEPLOY_ENV for consistency
             echo "Check the console output above for specific error details."
         }
     } 
