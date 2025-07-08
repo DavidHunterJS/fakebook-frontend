@@ -18,7 +18,7 @@ import { User } from '../../../types/user';
 import { getUserById } from '../../../services/adminService';
 import withAdminAuth from '../../../components/auth/withAdminAuth';
 import {getFullImageUrl} from '../../../utils/imgUrl';
-import { FriendUser } from '@/types/friends';
+
 
 
 
@@ -103,7 +103,8 @@ const UserDetailPage = () => {
             <Typography variant="h6" gutterBottom>Friends ({user.friends?.length || 0})</Typography>
             <List dense>
               {user.friends && user.friends.length > 0 ? (
-                user.friends.map((friend: any) => {
+                user.friends.map((friend: User) => {
+                console.log(friend);
                   return (
                     <ListItem key={friend._id}>
                       <ListItemAvatar>

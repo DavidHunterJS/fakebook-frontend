@@ -16,5 +16,5 @@ export interface User {
   location?: string;
   role?: string;
   isActive?: boolean;
-  friends?: string[];
+  friends?: User[];
 }
