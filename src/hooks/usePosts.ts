@@ -9,7 +9,6 @@ export const useGetPosts = () => {
     queryFn: async () => {
       const response = await api.get('/posts');
       
-      // Extract posts from whatever format the API returns
       const rawData: unknown = response.data;
       
       if (Array.isArray(rawData)) {
@@ -17,7 +16,6 @@ export const useGetPosts = () => {
       }
       
       if (typeof rawData === 'object' && rawData !== null) {
-        // Check for rawData.posts
         if (
           'posts' in (rawData as Record<string, unknown>) && 
           Array.isArray((rawData as Record<string, unknown>).posts)
@@ -25,7 +23,6 @@ export const useGetPosts = () => {
           return (rawData as Record<string, unknown[]>).posts as Post[];
         }
         
-        // Check for rawData.data.posts
         if ('data' in (rawData as Record<string, unknown>)) {
           const nestedData = (rawData as Record<string, unknown>).data;
           
@@ -45,38 +42,6 @@ export const useGetPosts = () => {
   });
 };
 
-// Add the useLikePost hook
-export const useLikePost = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async (postId: string) => {
-      const response = await api.post(`/posts/${postId}/like`);
-      return response.data;
-    },
-    onSuccess: () => {
-      // Invalidate and refetch posts data
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-    },
-  });
-};
-
-// Add the useDeletePost hook
-export const useDeletePost = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async (postId: string) => {
-      const response = await api.delete(`/posts/${postId}`);
-      return response.data;
-    },
-    onSuccess: () => {
-      // Invalidate and refetch posts data
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-    },
-  });
-};
-// Add this to your usePosts.ts file
 export const useGetUserPosts = (userId: string | undefined) => {
   return useQuery<Post[]>({
     queryKey: ['posts', 'user', userId],
@@ -85,7 +50,6 @@ export const useGetUserPosts = (userId: string | undefined) => {
       
       const response = await api.get(`/posts/user/${userId}`);
       
-      // Extract posts from whatever format the API returns
       const rawData: unknown = response.data;
       
       if (Array.isArray(rawData)) {
@@ -93,7 +57,6 @@ export const useGetUserPosts = (userId: string | undefined) => {
       }
       
       if (typeof rawData === 'object' && rawData !== null) {
-        // Check for rawData.posts
         if (
           'posts' in (rawData as Record<string, unknown>) && 
           Array.isArray((rawData as Record<string, unknown>).posts)
@@ -106,4 +69,64 @@ export const useGetUserPosts = (userId: string | undefined) => {
     },
     enabled: !!userId
   });
-};  
+};
+
+export const useLikePost = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (postId: string) => {
+      const response = await api.post(`/posts/${postId}/like`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+  });
+};
+
+// ✅ START: CORRECTED UPDATE POST HOOK
+// This interface now correctly expects the pre-built FormData.
+interface UpdatePostPayload {
+  postId: string;
+  formData: FormData;
+}
+
+// This function now correctly sends the FormData with the right headers.
+const updatePost = async ({ postId, formData }: UpdatePostPayload) => {
+  const { data } = await api.put(`/posts/${postId}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+};
+
+// The hook itself uses the corrected function.
+export const useUpdatePost = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: updatePost,
+    onSuccess: () => {
+      // Invalidate all post-related queries to refetch the latest data
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+    onError: (error) => {
+      console.error("Error updating post:", error);
+    }
+  });
+};
+// ✅ END: CORRECTED UPDATE POST HOOK
+
+export const useDeletePost = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (postId: string) => {
+      const response = await api.delete(`/posts/${postId}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+  });
+};
