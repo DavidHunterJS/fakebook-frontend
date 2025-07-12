@@ -15,7 +15,7 @@ pipeline {
     }
     
     tools {
-        nodejs 'NodeJS_22_on_EC2' 
+        nodejs 'NodeJS_18_on_EC2' 
     }
     
     stages {
@@ -81,7 +81,7 @@ pipeline {
                     echo "ℹ️  Environment set to: ${env.DEPLOY_ENV}"
                     echo "ℹ️  Target Heroku app initially: ${env.HEROKU_APP_NAME}"
 
-                    if (env.RESOLVED_BRANCH != null && env.RESOLVED_BRANCH.startsWith('feature/') && params.CREATE_FEATURE_APP == true && env.DEPLOY_ENV == 'dev') {
+                    if (env.RESOLVED_BRANCH != null && env.RESOLVED_BRANCH.startsWith('feature/') && params.CREATE_FEATURE_APP == true && env.hh_ENV == 'dev') {
                         def featureNameSanitized = env.RESOLVED_BRANCH.replace('feature/', '').replaceAll('[^a-zA-Z0-9-]', '-').toLowerCase()
                         env.HEROKU_APP_NAME = "fakebook-ft-${featureNameSanitized}".take(30)
                         echo "ℹ️  Feature branch will target dynamically named Heroku app: ${env.HEROKU_APP_NAME}"
@@ -414,7 +414,7 @@ pipeline {
                             echo "No changes to commit before Heroku push."
                         fi
 
-                        git push ${HEROKU_REMOTE_NAME} HEAD:main --force
+                        git push heroku-fakebook-frontend-staging HEAD:refs/heads/main --force
                         
                         echo "Step 7: Pushing deployment tag to Heroku remote..."
                         git push ${HEROKU_REMOTE_NAME} "$DEPLOY_TAG"
