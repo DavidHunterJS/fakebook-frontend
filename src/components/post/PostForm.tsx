@@ -1,17 +1,24 @@
-import React, { useState } from 'react';
-import { Box, TextField, Button, Avatar, Paper, IconButton, CircularProgress, Typography } from '@mui/material';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Box, TextField, Button, Avatar, Paper, IconButton, CircularProgress, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
-import DeleteIcon from '@mui/icons-material/Delete'; // Added for removing images
+import DeleteIcon from '@mui/icons-material/Delete';
+import PublicIcon from '@mui/icons-material/Public';
+import PeopleIcon from '@mui/icons-material/People';
+import LockIcon from '@mui/icons-material/Lock';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import api from '../../utils/api';
 import useAuth from '../../hooks/useAuth';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getFullImageUrl } from '../../utils/imgUrl';
+import { Post, PostVisibility } from '../../types/post';
+import { useUpdatePost } from '../../hooks/usePosts';
 
-const defaultAvatarFilename = 'default-avatar.png'
-// Add props interface
+const defaultAvatarFilename = 'default-avatar.png';
+
 interface PostFormProps {
+  formId?: string;
+  postToEdit?: Post;
   initialMode?: 'text' | 'photo';
   disableTextOnly?: boolean;
   onSubmitSuccess?: () => void;
@@ -20,6 +27,8 @@ interface PostFormProps {
 }
 
 const PostForm: React.FC<PostFormProps> = ({
+  formId,
+  postToEdit,
   initialMode = 'text',
   disableTextOnly = false,
   onSubmitSuccess,
@@ -29,18 +38,20 @@ const PostForm: React.FC<PostFormProps> = ({
   const { user } = useAuth();
   const [image, setImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [shouldRemoveImage, setShouldRemoveImage] = useState(false);
   const queryClient = useQueryClient();
+  const isEditMode = !!postToEdit;
 
-  // Create a validation schema based on props
+  const fileInputId = useMemo(() => `icon-button-file-${formId || Math.random().toString(36).substring(2, 9)}`, [formId]);
+
   const getValidationSchema = () => {
     if (disableTextOnly) {
-      // For photo mode, require an image but text is optional
       return Yup.object({
         text: Yup.string(),
         hasImage: Yup.boolean().isTrue('Please select an image to upload'),
+        visibility: Yup.string().oneOf(Object.values(PostVisibility)).required(),
       });
     } else {
-      // Default schema
       return Yup.object({
         text: Yup.string().when('hasImage', {
           is: false,
@@ -48,65 +59,96 @@ const PostForm: React.FC<PostFormProps> = ({
           otherwise: (schema) => schema.optional(),
         }),
         hasImage: Yup.boolean(),
+        visibility: Yup.string().oneOf(Object.values(PostVisibility)).required(),
       });
     }
   };
 
-  const mutation = useMutation({
+  const createMutation = useMutation({
     mutationFn: async (data: FormData) => {
       const response = await api.post('/posts', data, {
-        headers: { 'Content-Type': undefined }
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       return response.data;
     },
     onSuccess: () => {
-      // Invalidate queries related to posts to refetch
       queryClient.invalidateQueries({ queryKey: ['posts'] });
-      
-      // Additional queries to invalidate if in photo mode
       if (initialMode === 'photo') {
         queryClient.invalidateQueries({ queryKey: ['userPhotos'] });
       }
-      
       formik.resetForm();
       setImage(null);
       setPreviewUrl(null);
-      console.log('Post created successfully!');
-      
-      // Call the success callback if provided
       if (onSubmitSuccess) {
         onSubmitSuccess();
       }
     },
     onError: (error: unknown) => {
       console.error("Error creating post:", error);
-      // You could add error handling here
     }
   });
 
+  const updateMutation = useUpdatePost();
+
   const formik = useFormik({
     initialValues: {
-      text: '',
-      hasImage: initialMode === 'photo', // Initialize to true if in photo mode
+      text: postToEdit?.text || '',
+      hasImage: !!postToEdit?.media?.[0]?.url || initialMode === 'photo',
+      visibility: postToEdit?.visibility || PostVisibility.PUBLIC,
     },
     validationSchema: getValidationSchema(),
+    // Fix in your formik.onSubmit function:
+
     onSubmit: (values) => {
-      console.log("Submitting post...");
       const formData = new FormData();
       formData.append('text', values.text);
-      
-      if (image) {
-        formData.append('media', image);
+      formData.append('visibility', values.visibility);
+
+      if (isEditMode) {
+        // 🔥 FIX: Change 'media' to 'files' to match your backend
+        if (image) {
+          formData.append('files', image);  // Changed from 'media' to 'files'
+        }
+        formData.append('shouldRemoveImage', String(shouldRemoveImage));
+
+        // Debug logs
+        console.log('Update FormData contents:');
+        for (const [key, value] of formData.entries()) {
+          console.log(key, value);
+        }
+
+        updateMutation.mutate(
+          { postId: postToEdit._id, formData },
+          {
+            onSuccess: () => {
+              if (onSubmitSuccess) onSubmitSuccess();
+            },
+          }
+        );
+      } else {
+        // Create logic - also fix this
+        if (image) {
+          formData.append('files', image);  // Changed from 'media' to 'files'
+        }
+        if (initialMode === 'photo') {
+          formData.append('isPhotoPost', 'true');
+        }
+        createMutation.mutate(formData);
       }
-      
-      // Add a flag for photo-only posts if needed by your API
-      if (initialMode === 'photo') {
-        formData.append('isPhotoPost', 'true');
-      }
-      
-      mutation.mutate(formData);
-    },
+    }
   });
+
+  useEffect(() => {
+    if (isEditMode && postToEdit.media?.[0]?.url) {
+      console.log('Original media URL:', postToEdit.media[0].url);
+      const processedUrl = getFullImageUrl(postToEdit.media[0].url, 'post');
+      console.log('Processed URL:', processedUrl);
+      setPreviewUrl(processedUrl);
+      setShouldRemoveImage(false);
+    } else {
+        setPreviewUrl(null);
+    }
+  }, [postToEdit, isEditMode]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -114,6 +156,7 @@ const PostForm: React.FC<PostFormProps> = ({
       setImage(file);
       setPreviewUrl(URL.createObjectURL(file));
       formik.setFieldValue('hasImage', true);
+      setShouldRemoveImage(false); // If a new image is added, we aren't removing one
     } else {
       setImage(null);
       setPreviewUrl(null);
@@ -122,29 +165,18 @@ const PostForm: React.FC<PostFormProps> = ({
   };
 
   const handleRemoveImage = () => {
+    if (isEditMode && postToEdit?.media?.[0]?.url) {
+      setShouldRemoveImage(true);
+    }
     setImage(null);
     setPreviewUrl(null);
     formik.setFieldValue('hasImage', false);
-    // Reset the file input
-    const fileInput = document.getElementById('icon-button-file') as HTMLInputElement;
+    const fileInput = document.getElementById(fileInputId) as HTMLInputElement;
     if (fileInput) fileInput.value = '';
   };
 
-  // Get the correct avatar URL
   const avatarUrl = user ? getFullImageUrl(user.profilePicture, 'profile') : getFullImageUrl(defaultAvatarFilename, 'profile');
-
-  // Check if submit should be disabled
-  const isSubmitDisabled = () => {
-    if (mutation.isPending) return true;
-    
-    if (disableTextOnly) {
-      // In photo mode, require an image
-      return !image;
-    } else {
-      // In normal mode, require either text or image
-      return !formik.values.text && !image;
-    }
-  };
+  const mutation = isEditMode ? updateMutation : createMutation;
 
   return (
     <Paper 
@@ -154,12 +186,6 @@ const PostForm: React.FC<PostFormProps> = ({
         boxShadow: dialogMode ? 'none' : undefined
       }}
     >
-      {initialMode === 'photo' && !dialogMode && (
-        <Typography variant="h6" gutterBottom>
-          Upload Photos
-        </Typography>
-      )}
-      
       <Box component="form" onSubmit={formik.handleSubmit}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
           {!dialogMode && (
@@ -170,7 +196,6 @@ const PostForm: React.FC<PostFormProps> = ({
               sx={{ width: 40, height: 40, mr: 2, mt: 1 }}
             />
           )}
-          
           <TextField
             fullWidth
             id="text"
@@ -190,112 +215,81 @@ const PostForm: React.FC<PostFormProps> = ({
           />
         </Box>
 
-        {/* Image preview section */}
-        {previewUrl ? (
+        {previewUrl && (
           <Box sx={{ mb: 2, position: 'relative', width: '100%', pt: '56.25%' }}>
             <Box
               sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
                 backgroundImage: `url(${previewUrl})`,
-                backgroundSize: 'contain',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
-                borderRadius: 1,
-                border: '1px solid',
+                backgroundSize: 'contain', backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat', borderRadius: 1, border: '1px solid',
                 borderColor: 'divider'
               }}
             />
             <IconButton
               size="small"
               onClick={handleRemoveImage}
-              sx={{ 
-                position: 'absolute', 
-                top: 8, 
-                right: 8, 
-                bgcolor: 'rgba(0, 0, 0, 0.5)', 
-                color: 'white', 
-                '&:hover': { bgcolor: 'rgba(0, 0, 0, 0.7)'} 
-              }}
+              sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0, 0, 0, 0.5)', color: 'white', '&:hover': { bgcolor: 'rgba(0, 0, 0, 0.7)'} }}
               aria-label="Remove image"
             >
               <DeleteIcon fontSize="small" />
             </IconButton>
           </Box>
-        ) : (
-          // Show a placeholder or upload prompt in photo mode
-          initialMode === 'photo' && (
-            <Box 
-              sx={{ 
-                mb: 2, 
-                p: 4, 
-                border: '2px dashed', 
-                borderColor: 'divider',
-                borderRadius: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                '&:hover': { borderColor: 'primary.main' }
-              }}
-              onClick={() => document.getElementById('icon-button-file')?.click()}
-            >
-              <PhotoCameraIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-              <Typography variant="body1" color="text.secondary">
-                Click to select a photo to upload
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Supported formats: JPG, PNG, GIF
-              </Typography>
-              
-              {/* Show validation error for photo if needed */}
-              {formik.touched.hasImage && formik.errors.hasImage && (
-                <Typography color="error" variant="body2" sx={{ mt: 1 }}>
-                  {formik.errors.hasImage}
-                </Typography>
-              )}
-            </Box>
-          )
         )}
 
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
           <Box>
+            {/* ✅ REMOVED the 'disabled' prop from the input and label */}
             <input
               accept="image/*"
               style={{ display: 'none' }}
-              id="icon-button-file"
+              id={fileInputId}
               type="file"
               onChange={handleImageChange}
             />
-            <label htmlFor="icon-button-file">
-              <IconButton 
-                color="primary" 
-                aria-label="upload picture" 
-                component="span"
-                sx={{ 
-                  bgcolor: initialMode === 'photo' ? 'action.selected' : undefined,
-                  '&:hover': { bgcolor: initialMode === 'photo' ? 'action.hover' : undefined }
-                }}
-              >
+            <label htmlFor={fileInputId}>
+              <IconButton color="primary" aria-label="upload picture" component="span">
                 <PhotoCameraIcon />
               </IconButton>
             </label>
           </Box>
-          <Button
-            variant="contained"
-            color="primary"
-            type="submit"
-            disabled={isSubmitDisabled()}
-            startIcon={mutation.isPending ? <CircularProgress size={20} color="inherit" /> : null}
-          >
-            {mutation.isPending 
-              ? 'Uploading...' 
-              : customSubmitButtonText || (initialMode === 'photo' ? 'Upload Photo' : 'Post')}
-          </Button>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel id="visibility-select-label" sx={{ display: 'none' }}>Visibility</InputLabel>
+              <Select
+                labelId="visibility-select-label"
+                id="visibility"
+                name="visibility"
+                value={formik.values.visibility}
+                onChange={formik.handleChange}
+                renderValue={(selectedValue) => (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {selectedValue === PostVisibility.PUBLIC && <PublicIcon fontSize="small" />}
+                    {selectedValue === PostVisibility.FRIENDS && <PeopleIcon fontSize="small" />}
+                    {selectedValue === PostVisibility.PRIVATE && <LockIcon fontSize="small" />}
+                    {selectedValue.charAt(0).toUpperCase() + selectedValue.slice(1)}
+                  </Box>
+                )}
+              >
+                <MenuItem value={PostVisibility.PUBLIC}><PublicIcon sx={{ mr: 1 }} /> Public</MenuItem>
+                <MenuItem value={PostVisibility.FRIENDS}><PeopleIcon sx={{ mr: 1 }} /> Friends</MenuItem>
+                <MenuItem value={PostVisibility.PRIVATE}><LockIcon sx={{ mr: 1 }} /> Private</MenuItem>
+              </Select>
+            </FormControl>
+            <Button
+              variant="contained"
+              color="primary"
+              type="submit"
+              disabled={mutation.isPending || (!formik.values.text && !image && !previewUrl)}
+              startIcon={mutation.isPending ? <CircularProgress size={20} color="inherit" /> : null}
+            >
+              {mutation.isPending 
+                ? 'Saving...' 
+                : isEditMode
+                ? 'Save Changes'
+                : customSubmitButtonText || (initialMode === 'photo' ? 'Upload Photo' : 'Post')}
+            </Button>
+          </Box>
         </Box>
       </Box>
     </Paper>
