@@ -15,7 +15,7 @@ pipeline {
     }
     
     tools {
-        nodejs 'NodeJS_18_on_EC2' 
+        nodejs 'NodeJS_22_on_EC2' 
     }
     
     stages {
