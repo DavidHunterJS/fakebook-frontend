@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Box, TextField, Button, Avatar, Paper, IconButton, CircularProgress, Typography, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
+import { Box, TextField, Button, Avatar, Paper, IconButton, CircularProgress, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PublicIcon from '@mui/icons-material/Public';
@@ -113,7 +113,7 @@ const PostForm: React.FC<PostFormProps> = ({
 
         // Debug logs
         console.log('Update FormData contents:');
-        for (let [key, value] of formData.entries()) {
+        for (const [key, value] of formData.entries()) {
           console.log(key, value);
         }
 

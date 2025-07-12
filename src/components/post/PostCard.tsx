@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Card, CardHeader, CardContent, CardActions, CardMedia, Button, Avatar, Typography, IconButton, Box, Menu, MenuItem, Divider, Modal, Tooltip } from '@mui/material';
+import { Card, CardHeader, CardContent, CardActions, CardMedia, Button, Avatar, Typography, IconButton, Box, Menu, MenuItem, Divider, Modal } from '@mui/material';
 import { Favorite as FavoriteIcon, FavoriteBorder as FavoriteBorderIcon, Comment as CommentIcon, MoreVert as MoreVertIcon, Delete as DeleteIcon, Edit as EditIcon, Public as PublicIcon, People as PeopleIcon, Lock as LockIcon } from '@mui/icons-material';
 import Link from 'next/link';
 import { Post, PostVisibility } from '../../types/post';
