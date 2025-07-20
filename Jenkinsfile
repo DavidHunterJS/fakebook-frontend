@@ -414,7 +414,7 @@ pipeline {
                             echo "No changes to commit before Heroku push."
                         fi
 
-                        git push heroku-fakebook-frontend-staging HEAD:refs/heads/main --force
+                        git push ${HEROKU_REMOTE_NAME} HEAD:refs/heads/main --force
                         
                         echo "Step 7: Pushing deployment tag to Heroku remote..."
                         git push ${HEROKU_REMOTE_NAME} "$DEPLOY_TAG"
