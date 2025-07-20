@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Box, TextField, Button, Avatar, Paper, IconButton, CircularProgress, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
+import { 
+  Box, TextField, Button, Avatar, Paper, IconButton, 
+  CircularProgress, Select, MenuItem, FormControl, InputLabel,
+  Dialog, DialogContent, DialogTitle, InputAdornment
+} from '@mui/material';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PublicIcon from '@mui/icons-material/Public';
 import PeopleIcon from '@mui/icons-material/People';
 import LockIcon from '@mui/icons-material/Lock';
+import CloseIcon from '@mui/icons-material/Close';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import api from '../../utils/api';
@@ -13,6 +20,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getFullImageUrl } from '../../utils/imgUrl';
 import { Post, PostVisibility } from '../../types/post';
 import { useUpdatePost } from '../../hooks/usePosts';
+import ImageGenerator from '../ImageGenerator'; // Adjust path as needed
 
 const defaultAvatarFilename = 'default-avatar.png';
 
@@ -30,7 +38,6 @@ const PostForm: React.FC<PostFormProps> = ({
   formId,
   postToEdit,
   initialMode = 'text',
-  disableTextOnly = false,
   onSubmitSuccess,
   customSubmitButtonText,
   dialogMode = false,
@@ -39,38 +46,27 @@ const PostForm: React.FC<PostFormProps> = ({
   const [image, setImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [shouldRemoveImage, setShouldRemoveImage] = useState(false);
+  const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const queryClient = useQueryClient();
   const isEditMode = !!postToEdit;
+  const [isRewriting, setIsRewriting] = useState(false);
 
   const fileInputId = useMemo(() => `icon-button-file-${formId || Math.random().toString(36).substring(2, 9)}`, [formId]);
 
   const getValidationSchema = () => {
-    if (disableTextOnly) {
-      return Yup.object({
-        text: Yup.string(),
-        hasImage: Yup.boolean().isTrue('Please select an image to upload'),
-        visibility: Yup.string().oneOf(Object.values(PostVisibility)).required(),
-      });
-    } else {
-      return Yup.object({
-        text: Yup.string().when('hasImage', {
-          is: false,
-          then: (schema) => schema.required('Post content is required when no image is added'),
-          otherwise: (schema) => schema.optional(),
-        }),
-        hasImage: Yup.boolean(),
-        visibility: Yup.string().oneOf(Object.values(PostVisibility)).required(),
-      });
-    }
+    return Yup.object({
+      text: Yup.string().when('hasImage', {
+        is: false,
+        then: (schema) => schema.required('Post text is required when no image is added'),
+        otherwise: (schema) => schema.optional(),
+      }),
+      hasImage: Yup.boolean(),
+      visibility: Yup.string().oneOf(Object.values(PostVisibility)).required(),
+    });
   };
 
   const createMutation = useMutation({
-    mutationFn: async (data: FormData) => {
-      const response = await api.post('/posts', data, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      return response.data;
-    },
+    mutationFn: (data: FormData) => api.post('/posts', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       if (initialMode === 'photo') {
@@ -93,46 +89,22 @@ const PostForm: React.FC<PostFormProps> = ({
   const formik = useFormik({
     initialValues: {
       text: postToEdit?.text || '',
-      hasImage: !!postToEdit?.media?.[0]?.url || initialMode === 'photo',
+      hasImage: !!postToEdit?.media?.[0]?.url,
       visibility: postToEdit?.visibility || PostVisibility.PUBLIC,
     },
     validationSchema: getValidationSchema(),
-    // Fix in your formik.onSubmit function:
-
     onSubmit: (values) => {
       const formData = new FormData();
       formData.append('text', values.text);
       formData.append('visibility', values.visibility);
 
       if (isEditMode) {
-        // 🔥 FIX: Change 'media' to 'files' to match your backend
-        if (image) {
-          formData.append('files', image);  // Changed from 'media' to 'files'
-        }
+        if (image) formData.append('files', image);
         formData.append('shouldRemoveImage', String(shouldRemoveImage));
-
-        // Debug logs
-        console.log('Update FormData contents:');
-        for (const [key, value] of formData.entries()) {
-          console.log(key, value);
-        }
-
-        updateMutation.mutate(
-          { postId: postToEdit._id, formData },
-          {
-            onSuccess: () => {
-              if (onSubmitSuccess) onSubmitSuccess();
-            },
-          }
-        );
+        updateMutation.mutate({ postId: postToEdit._id, formData }, { onSuccess: () => { if (onSubmitSuccess) onSubmitSuccess(); }});
       } else {
-        // Create logic - also fix this
-        if (image) {
-          formData.append('files', image);  // Changed from 'media' to 'files'
-        }
-        if (initialMode === 'photo') {
-          formData.append('isPhotoPost', 'true');
-        }
+        if (image) formData.append('files', image);
+        if (initialMode === 'photo') formData.append('isPhotoPost', 'true');
         createMutation.mutate(formData);
       }
     }
@@ -140,13 +112,10 @@ const PostForm: React.FC<PostFormProps> = ({
 
   useEffect(() => {
     if (isEditMode && postToEdit.media?.[0]?.url) {
-      console.log('Original media URL:', postToEdit.media[0].url);
-      const processedUrl = getFullImageUrl(postToEdit.media[0].url, 'post');
-      console.log('Processed URL:', processedUrl);
-      setPreviewUrl(processedUrl);
+      setPreviewUrl(getFullImageUrl(postToEdit.media[0].url, 'post'));
       setShouldRemoveImage(false);
     } else {
-        setPreviewUrl(null);
+      setPreviewUrl(null);
     }
   }, [postToEdit, isEditMode]);
 
@@ -156,14 +125,18 @@ const PostForm: React.FC<PostFormProps> = ({
       setImage(file);
       setPreviewUrl(URL.createObjectURL(file));
       formik.setFieldValue('hasImage', true);
-      setShouldRemoveImage(false); // If a new image is added, we aren't removing one
-    } else {
-      setImage(null);
-      setPreviewUrl(null);
-      formik.setFieldValue('hasImage', false);
+      setShouldRemoveImage(false);
     }
   };
 
+  const handleAiImageSelected = (file: File) => {
+    setImage(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    formik.setFieldValue('hasImage', true);
+    setShouldRemoveImage(false);
+    setIsGeneratorOpen(false);
+  };
+  
   const handleRemoveImage = () => {
     if (isEditMode && postToEdit?.media?.[0]?.url) {
       setShouldRemoveImage(true);
@@ -175,124 +148,188 @@ const PostForm: React.FC<PostFormProps> = ({
     if (fileInput) fileInput.value = '';
   };
 
+  const handleRewriteText = async () => {
+    const currentText = formik.values.text;
+    if (!currentText || currentText.trim().length === 0) {
+      return; // Don't do anything if there's no text
+    }
+
+    setIsRewriting(true);
+    try {
+      const apiUrl = `${process.env.NEXT_PUBLIC_BACKEND_BASE_URL}/api/rewrite-text`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: currentText }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get a response from the server.');
+      }
+
+      const data = await response.json();
+      // Update the form field with the new text from the AI
+      formik.setFieldValue('text', data.rewrittenText);
+
+    } catch (error) {
+      console.error("Error rewriting text:", error);
+      // You could add a user-facing error message here (e.g., using a snackbar)
+    } finally {
+      setIsRewriting(false);
+    }
+  };
+
   const avatarUrl = user ? getFullImageUrl(user.profilePicture, 'profile') : getFullImageUrl(defaultAvatarFilename, 'profile');
   const mutation = isEditMode ? updateMutation : createMutation;
 
   return (
-    <Paper 
-      sx={{ 
-        p: 2, 
-        mb: dialogMode ? 0 : 3,
-        boxShadow: dialogMode ? 'none' : undefined
-      }}
-    >
-      <Box component="form" onSubmit={formik.handleSubmit}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-          {!dialogMode && (
-            <Avatar
-              key={`avatar-${user?._id || 'guest'}-${Date.now()}`}
-              src={avatarUrl}
-              alt={user?.username || 'User'}
-              sx={{ width: 40, height: 40, mr: 2, mt: 1 }}
-            />
-          )}
-          <TextField
-            fullWidth
-            id="text"
-            name="text"
-            placeholder={initialMode === 'photo' 
-              ? 'Add a caption to your photo...' 
-              : `What's on your mind, ${user?.firstName || user?.username || 'User'}?`}
-            multiline
-            minRows={initialMode === 'photo' ? 2 : 3}
-            variant="outlined"
-            value={formik.values.text}
-            onChange={formik.handleChange}
-            onBlur={formik.handleBlur}
-            error={formik.touched.text && Boolean(formik.errors.text)}
-            helperText={formik.touched.text && formik.errors.text}
-            sx={{ bgcolor: 'action.hover', borderRadius: 1 }}
-          />
-        </Box>
-
-        {previewUrl && (
-          <Box sx={{ mb: 2, position: 'relative', width: '100%', pt: '56.25%' }}>
-            <Box
-              sx={{
-                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                backgroundImage: `url(${previewUrl})`,
-                backgroundSize: 'contain', backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat', borderRadius: 1, border: '1px solid',
-                borderColor: 'divider'
+    <>
+      <Paper sx={{ p: 2, mb: dialogMode ? 0 : 3, boxShadow: dialogMode ? 'none' : undefined }}>
+        <Box component="form" onSubmit={formik.handleSubmit}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+            {!dialogMode && (
+              <Avatar src={avatarUrl} alt={user?.username || 'User'} sx={{ width: 40, height: 40, mr: 2, mt: 1 }} />
+            )}
+            <TextField
+              fullWidth
+              id="text"
+              name="text"
+              placeholder={`What's on your mind, ${user?.firstName || 'User'}?`}
+              multiline
+              minRows={3}
+              variant="outlined"
+              value={formik.values.text}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              error={formik.touched.text && Boolean(formik.errors.text)}
+              helperText={formik.touched.text && formik.errors.text}
+              sx={{ bgcolor: 'action.hover', borderRadius: 1 }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end" sx={{ alignSelf: 'flex-start', mt: 1 }}>
+                    <IconButton
+                      aria-label="rewrite with ai"
+                      onClick={handleRewriteText}
+                      disabled={isRewriting || !formik.values.text}
+                    >
+                      {isRewriting ? <CircularProgress size={24} /> : <AutoFixHighIcon />}
+                    </IconButton>
+                  </InputAdornment>
+                )
               }}
             />
-            <IconButton
-              size="small"
-              onClick={handleRemoveImage}
-              sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0, 0, 0, 0.5)', color: 'white', '&:hover': { bgcolor: 'rgba(0, 0, 0, 0.7)'} }}
-              aria-label="Remove image"
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
           </Box>
-        )}
 
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
-          <Box>
-            {/* ✅ REMOVED the 'disabled' prop from the input and label */}
-            <input
-              accept="image/*"
-              style={{ display: 'none' }}
-              id={fileInputId}
-              type="file"
-              onChange={handleImageChange}
-            />
-            <label htmlFor={fileInputId}>
-              <IconButton color="primary" aria-label="upload picture" component="span">
-                <PhotoCameraIcon />
-              </IconButton>
-            </label>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel id="visibility-select-label" sx={{ display: 'none' }}>Visibility</InputLabel>
-              <Select
-                labelId="visibility-select-label"
-                id="visibility"
-                name="visibility"
-                value={formik.values.visibility}
-                onChange={formik.handleChange}
-                renderValue={(selectedValue) => (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {selectedValue === PostVisibility.PUBLIC && <PublicIcon fontSize="small" />}
-                    {selectedValue === PostVisibility.FRIENDS && <PeopleIcon fontSize="small" />}
-                    {selectedValue === PostVisibility.PRIVATE && <LockIcon fontSize="small" />}
-                    {selectedValue.charAt(0).toUpperCase() + selectedValue.slice(1)}
-                  </Box>
-                )}
+          {previewUrl && (
+            <Box sx={{ mb: 2, position: 'relative', width: '100%', pt: '56.25%' }}>
+              <Box
+                sx={{
+                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                  backgroundImage: `url(${previewUrl})`,
+                  backgroundSize: 'contain', backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat', borderRadius: 1, border: '1px solid',
+                  borderColor: 'divider'
+                }}
+              />
+              <IconButton
+                size="small"
+                onClick={handleRemoveImage}
+                sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0, 0, 0, 0.5)', color: 'white', '&:hover': { bgcolor: 'rgba(0, 0, 0, 0.7)'} }}
+                aria-label="Remove image"
               >
-                <MenuItem value={PostVisibility.PUBLIC}><PublicIcon sx={{ mr: 1 }} /> Public</MenuItem>
-                <MenuItem value={PostVisibility.FRIENDS}><PeopleIcon sx={{ mr: 1 }} /> Friends</MenuItem>
-                <MenuItem value={PostVisibility.PRIVATE}><LockIcon sx={{ mr: 1 }} /> Private</MenuItem>
-              </Select>
-            </FormControl>
-            <Button
-              variant="contained"
-              color="primary"
-              type="submit"
-              disabled={mutation.isPending || (!formik.values.text && !image && !previewUrl)}
-              startIcon={mutation.isPending ? <CircularProgress size={20} color="inherit" /> : null}
-            >
-              {mutation.isPending 
-                ? 'Saving...' 
-                : isEditMode
-                ? 'Save Changes'
-                : customSubmitButtonText || (initialMode === 'photo' ? 'Upload Photo' : 'Post')}
-            </Button>
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          )}
+
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
+            <Box>
+              <input accept="image/*" style={{ display: 'none' }} id={fileInputId} type="file" onChange={handleImageChange} />
+              <label htmlFor={fileInputId}>
+                <IconButton color="primary" aria-label="upload picture" component="span">
+                  <PhotoCameraIcon />
+                </IconButton>
+              </label>
+              {/* ✅ ADDED: AI Generator Button */}
+              <IconButton color="secondary" aria-label="generate with ai" onClick={() => setIsGeneratorOpen(true)}>
+                <AutoAwesomeIcon />
+              </IconButton>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel id="visibility-select-label" sx={{ display: 'none' }}>Visibility</InputLabel>
+                <Select
+                  labelId="visibility-select-label"
+                  id="visibility"
+                  name="visibility"
+                  value={formik.values.visibility}
+                  onChange={formik.handleChange}
+                  renderValue={(selectedValue) => (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {selectedValue === PostVisibility.PUBLIC && <PublicIcon fontSize="small" />}
+                      {selectedValue === PostVisibility.FRIENDS && <PeopleIcon fontSize="small" />}
+                      {selectedValue === PostVisibility.PRIVATE && <LockIcon fontSize="small" />}
+                      {selectedValue.charAt(0).toUpperCase() + selectedValue.slice(1)}
+                    </Box>
+                  )}
+                >
+                  <MenuItem value={PostVisibility.PUBLIC}><PublicIcon sx={{ mr: 1 }} /> Public</MenuItem>
+                  <MenuItem value={PostVisibility.FRIENDS}><PeopleIcon sx={{ mr: 1 }} /> Friends</MenuItem>
+                  <MenuItem value={PostVisibility.PRIVATE}><LockIcon sx={{ mr: 1 }} /> Private</MenuItem>
+                </Select>
+              </FormControl>
+              <Button
+                variant="contained"
+                color="primary"
+                type="submit"
+                disabled={mutation.isPending || !formik.isValid || (isEditMode && !formik.dirty)}
+                startIcon={mutation.isPending ? <CircularProgress size={20} color="inherit" /> : null}
+              >
+                {mutation.isPending 
+                  ? 'Saving...' 
+                  : isEditMode
+                  ? 'Save Changes'
+                  : customSubmitButtonText || 'Post'}
+              </Button>
+            </Box>
           </Box>
         </Box>
-      </Box>
-    </Paper>
+      </Paper>
+      
+      {/* ✅ ADDED: AI Generator Dialog */}
+<Dialog 
+  open={isGeneratorOpen} 
+  onClose={() => setIsGeneratorOpen(false)} 
+  maxWidth="sm" 
+  fullWidth
+>
+  <DialogTitle sx={{ 
+    m: 0, 
+    p: 2, 
+    bgcolor: 'primary.main', 
+    color: 'white' 
+    }}>
+      AI Image Generator
+      <IconButton
+        aria-label="close"
+        onClick={() => setIsGeneratorOpen(false)}
+        sx={{
+          position: 'absolute',
+          right: 8,
+          top: 8,
+          color: (theme) => theme.palette.grey[500],
+        }}
+      >
+        <CloseIcon />
+      </IconButton>
+    </DialogTitle>
+    
+    <DialogContent dividers>
+      <ImageGenerator onImageSelect={handleAiImageSelected} />
+    </DialogContent>
+  </Dialog>
+
+    </>
   );
 };
 

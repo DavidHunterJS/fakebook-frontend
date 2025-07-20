@@ -1,6 +1,6 @@
+// src/contexts/SocketContext.tsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Socket } from 'socket.io-client';
-import { initializeSocket, disconnectSocket, getSocket } from '../lib/socket';
+import { io, Socket } from 'socket.io-client';
 import useAuth from '../hooks/useAuth';
 
 type SocketContextType = {
@@ -16,32 +16,46 @@ const SocketContext = createContext<SocketContextType>({
 export const useSocket = () => useContext(SocketContext);
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const { user, token } = useAuth();
+  const { token } = useAuth();
 
   useEffect(() => {
-    if (token && user) {
-      const socket = initializeSocket(token);
-      
-      socket.on('connect', () => {
+    // Only try to connect if we have a token
+    if (token) {
+      // Use the environment variable for the URL
+      const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL!, {
+        auth: { token },
+      });
+
+      setSocket(newSocket);
+
+      const onConnect = () => {
         console.log('Socket connected');
         setIsConnected(true);
-      });
+      };
 
-      socket.on('disconnect', () => {
+      const onDisconnect = () => {
         console.log('Socket disconnected');
         setIsConnected(false);
-      });
+      };
 
-      // Clean up on unmount
+      newSocket.on('connect', onConnect);
+      newSocket.on('disconnect', onDisconnect);
+
+      // Cleanup function to run when the component unmounts or token changes
       return () => {
-        disconnectSocket();
+        newSocket.off('connect', onConnect);
+        newSocket.off('disconnect', onDisconnect);
+        newSocket.disconnect();
+        setSocket(null);
+        setIsConnected(false);
       };
     }
-  }, [token, user]);
+  }, [token]); // Effect depends only on the token
 
   const value = {
-    socket: getSocket(),
+    socket,
     isConnected,
   };
 
