@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, TextField, Button, Avatar, Paper, IconButton, 
   CircularProgress, Select, MenuItem, FormControl, InputLabel,
-  Dialog, DialogContent, DialogTitle 
+  Dialog, DialogContent, DialogTitle, InputAdornment
 } from '@mui/material';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -11,6 +11,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import LockIcon from '@mui/icons-material/Lock';
 import CloseIcon from '@mui/icons-material/Close';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import api from '../../utils/api';
@@ -48,6 +49,7 @@ const PostForm: React.FC<PostFormProps> = ({
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const queryClient = useQueryClient();
   const isEditMode = !!postToEdit;
+  const [isRewriting, setIsRewriting] = useState(false);
 
   const fileInputId = useMemo(() => `icon-button-file-${formId || Math.random().toString(36).substring(2, 9)}`, [formId]);
 
@@ -146,6 +148,37 @@ const PostForm: React.FC<PostFormProps> = ({
     if (fileInput) fileInput.value = '';
   };
 
+  const handleRewriteText = async () => {
+    const currentText = formik.values.text;
+    if (!currentText || currentText.trim().length === 0) {
+      return; // Don't do anything if there's no text
+    }
+
+    setIsRewriting(true);
+    try {
+      const apiUrl = `${process.env.NEXT_PUBLIC_BACKEND_BASE_URL}/api/rewrite-text`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: currentText }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get a response from the server.');
+      }
+
+      const data = await response.json();
+      // Update the form field with the new text from the AI
+      formik.setFieldValue('text', data.rewrittenText);
+
+    } catch (error) {
+      console.error("Error rewriting text:", error);
+      // You could add a user-facing error message here (e.g., using a snackbar)
+    } finally {
+      setIsRewriting(false);
+    }
+  };
+
   const avatarUrl = user ? getFullImageUrl(user.profilePicture, 'profile') : getFullImageUrl(defaultAvatarFilename, 'profile');
   const mutation = isEditMode ? updateMutation : createMutation;
 
@@ -171,6 +204,19 @@ const PostForm: React.FC<PostFormProps> = ({
               error={formik.touched.text && Boolean(formik.errors.text)}
               helperText={formik.touched.text && formik.errors.text}
               sx={{ bgcolor: 'action.hover', borderRadius: 1 }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end" sx={{ alignSelf: 'flex-start', mt: 1 }}>
+                    <IconButton
+                      aria-label="rewrite with ai"
+                      onClick={handleRewriteText}
+                      disabled={isRewriting || !formik.values.text}
+                    >
+                      {isRewriting ? <CircularProgress size={24} /> : <AutoFixHighIcon />}
+                    </IconButton>
+                  </InputAdornment>
+                )
+              }}
             />
           </Box>
 
