@@ -27,7 +27,6 @@ interface PostFormProps {
   formId?: string;
   postToEdit?: Post;
   initialMode?: 'text' | 'photo';
-  disableTextOnly?: boolean;
   onSubmitSuccess?: () => void;
   customSubmitButtonText?: string;
   dialogMode?: boolean;
@@ -37,7 +36,6 @@ const PostForm: React.FC<PostFormProps> = ({
   formId,
   postToEdit,
   initialMode = 'text',
-  disableTextOnly = false,
   onSubmitSuccess,
   customSubmitButtonText,
   dialogMode = false,
