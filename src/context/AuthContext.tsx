@@ -185,9 +185,7 @@ export const AuthProvider: FC<{children: ReactNode}> = ({ children }) => {
       axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
       try {
-        const res = await axiosInstance.get('/auth/me');
-        console.log('User data from API (/auth/me) on load:', res.data);
-        
+        const res = await axiosInstance.get('/auth/me');        
         dispatch({
           type: 'USER_LOADED',
           payload: { 
