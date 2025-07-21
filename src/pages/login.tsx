@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { Box, Typography, Paper, Divider, Button } from '@mui/material';
 import useAuth from '../hooks/useAuth';
 import LoginForm from '../components/auth/LoginForm';
-import { NextPageWithLayout } from '../types/next'; // Import the custom type
+import { NextPageWithLayout } from '../types/next';
+import DemoCredentials from '../components/DemoCredentials';
 
 const Login: NextPageWithLayout = () => {
   const { isAuthenticated } = useAuth();
@@ -42,6 +43,7 @@ const Login: NextPageWithLayout = () => {
           Connect with friends and the world around you
         </Typography>
         <Divider sx={{ my: 2 }} />
+        <DemoCredentials />
         <LoginForm />
         <Divider sx={{ my: 2 }} />
         <Button
