@@ -32,7 +32,7 @@ a {
   padding: 10px 5px;
   font-size: 0.9em;
   font-weight: bold;
-  width: 100%; /* Make it span the width if desired */
+  width: 50%; /* Make it span the width if desired */
   box-sizing: border-box; /* Ensures padding doesn't add to width */
   /* You might need to adjust positioning (e.g., position: fixed, z-index)
      if your header has complex layout or fixed positioning itself. */
