@@ -35,7 +35,7 @@ interface Parameters {
   safety_filter_level?: string;
   size?: string;
   style?: string;
-  [key: string]: any;
+  [key: string]: string | undefined;
 }
 
 export default function ImageGeneratorPage() {
@@ -86,7 +86,7 @@ export default function ImageGeneratorPage() {
 
     try {
       const filteredParams = Object.fromEntries(
-        Object.entries(parameters).filter(([_, value]) => value !== '')
+        Object.entries(parameters).filter(([ value]) => value !== '')
       );
       
       const payload = {
@@ -117,7 +117,7 @@ export default function ImageGeneratorPage() {
           const errorData = await response.json();
           console.log('Error response:', errorData);
           errorMessage = errorData.error || errorData.message || errorMessage;
-        } catch (parseError) {
+        } catch (errorMessage) {
           console.log('Could not parse error response');
         }
         throw new Error(errorMessage);
@@ -130,9 +130,10 @@ export default function ImageGeneratorPage() {
       } else {
         setError(result.error || 'The API returned success but no images were found.');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Frontend submission error:', err);
-      setError(err.message || 'An unexpected error occurred. Please check the console.');
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred. Please check the console.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
