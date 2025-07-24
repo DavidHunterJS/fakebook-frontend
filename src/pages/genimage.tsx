@@ -117,7 +117,7 @@ export default function ImageGeneratorPage() {
           const errorData = await response.json();
           console.log('Error response:', errorData);
           errorMessage = errorData.error || errorData.message || errorMessage;
-        } catch (errorMessage) {
+        } catch (parseError) {
           console.log('Could not parse error response');
         }
         throw new Error(errorMessage);
