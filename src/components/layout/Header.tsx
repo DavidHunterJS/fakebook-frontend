@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import NotificationIcon from '../notifications/NotificationIcon';
 import {
   AppBar,
   Toolbar,
@@ -21,7 +22,6 @@ import {
 import { styled, alpha } from '@mui/material/styles';
 import {
   Search as SearchIcon,
-  Notifications as NotificationsIcon,
   Home as HomeIcon,
   Person as PersonIcon,
   People as PeopleIcon,
@@ -32,10 +32,8 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import useAuth from '../../hooks/useAuth'; // Adjust path if needed
 import { getFullImageUrl } from '../../utils/imgUrl';
-
-// --- NEW IMPORTS ---
-import { useQuery } from '@tanstack/react-query';
-import axios from '../../lib/axios'; // Your Axios instance
+// import { useQuery } from '@tanstack/react-query';
+// import axios from '../../lib/axios'; // Your Axios instance
 // --- END NEW IMPORTS ---
 
 const Search = styled('div')(({ theme }) => ({
@@ -84,30 +82,30 @@ const Header = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   // --- NEW: FETCH UNREAD NOTIFICATION COUNT ---
-  const { data: unreadCountData } = useQuery({
-    queryKey: ['unreadNotificationsCount'],
-    queryFn: async () => {
-      // Only fetch if authenticated
-      if (!isAuthenticated) return { count: 0 };
-      try {
-        const response = await axios.get('/notifications/unread-count');
-        return response.data; // Expected format: { count: number }
-      } catch (error) {
-        console.error('Failed to fetch unread notification count:', error);
-        return { count: 0 }; // Return 0 on error
-      }
-    },
-    // The query should only run if the user is authenticated
-    enabled: isAuthenticated,
-    // Refetch interval to keep the count updated (e.g., every 30 seconds)
-    refetchInterval: 30000,
-    // Refetch when the window regains focus (user returns to tab)
-    refetchOnWindowFocus: true,
-    // Keep data fresh when component remounts or query key changes
-    staleTime: 5000, // Data is fresh for 5 seconds
-  });
+  // const { data: unreadCountData } = useQuery({
+  //   queryKey: ['unreadNotificationsCount'],
+  //   queryFn: async () => {
+  //     // Only fetch if authenticated
+  //     if (!isAuthenticated) return { count: 0 };
+  //     try {
+  //       const response = await axios.get('/notifications/unread-count');
+  //       return response.data; // Expected format: { count: number }
+  //     } catch (error) {
+  //       console.error('Failed to fetch unread notification count:', error);
+  //       return { count: 0 }; // Return 0 on error
+  //     }
+  //   },
+  //   // The query should only run if the user is authenticated
+  //   enabled: isAuthenticated,
+  //   // Refetch interval to keep the count updated (e.g., every 30 seconds)
+  //   refetchInterval: 30000,
+  //   // Refetch when the window regains focus (user returns to tab)
+  //   refetchOnWindowFocus: true,
+  //   // Keep data fresh when component remounts or query key changes
+  //   staleTime: 5000, // Data is fresh for 5 seconds
+  // });
 
-  const unreadCount = unreadCountData?.count || 0;
+  // const unreadCount = unreadCountData?.count || 0;
   // --- END NEW ---
 
   const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -255,15 +253,9 @@ const Header = () => {
               </div>
               <Box sx={{ flexGrow: 1 }} />
               <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center' }}>
-                <Link href="/notifications" passHref legacyBehavior>
-                  <IconButton color="inherit" component="a">
-                    {/* --- UPDATED BADGE CONTENT --- */}
-                    <Badge badgeContent={unreadCount} color="error">
-                      <NotificationsIcon />
-                    </Badge>
-                    {/* --- END UPDATED BADGE CONTENT --- */}
-                  </IconButton>
-                </Link>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <NotificationIcon />
+              </Box>
                 <IconButton
                   edge="end"
                   aria-label="account of current user"
