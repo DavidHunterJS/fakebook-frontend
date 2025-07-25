@@ -31,7 +31,8 @@ function MyApp({ Component, pageProps }: AppProps) {
     '/reset-password', 
     '/verify-email',
     '/friends',
-    '/settings/profile'
+    '/settings/profile',
+    '/genimage'
   ];
 
   // Check if current path starts with /profile/ to match dynamic routes
