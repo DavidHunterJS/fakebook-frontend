@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Card, CardHeader, CardContent, CardActions, CardMedia, Button, Avatar, Typography, IconButton, Box, Menu, MenuItem, Divider, Modal, Stack } from '@mui/material';
+import { Card, CardHeader, CardContent, CardMedia, Button, Avatar, Typography, IconButton, Box, Menu, MenuItem, Divider, Modal } from '@mui/material';
 import { Comment as CommentIcon, MoreVert as MoreVertIcon, Delete as DeleteIcon, Edit as EditIcon, Public as PublicIcon, People as PeopleIcon, Lock as LockIcon } from '@mui/icons-material';
 import Link from 'next/link';
 import { Post, PostVisibility } from '../../types/post'; // Assuming Post type includes reactionsSummary

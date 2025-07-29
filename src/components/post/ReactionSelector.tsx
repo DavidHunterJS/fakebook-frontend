@@ -9,15 +9,6 @@ import {
   Avatar,
   AvatarGroup,
 } from '@mui/material';
-import { styled } from '@mui/material/styles';
-import {
-  ThumbUp,
-  Favorite,
-  SentimentVerySatisfied,
-  SentimentVeryDissatisfied,
-  SentimentDissatisfied,
-  AutoAwesome
-} from '@mui/icons-material';
 import useAuth from '../../hooks/useAuth'; // Adjust the path if necessary
 
 // --- Type Definitions ---
@@ -42,28 +33,6 @@ const REACTION_TYPES = {
   THUMBS_DOWN: 'thumbs_down'
 } as const;
 type ReactionType = typeof REACTION_TYPES[keyof typeof REACTION_TYPES];
-
-// Use Material-UI icons as reliable fallback - simplified approach
-const getReactionIcon = (type: ReactionType) => {
-  const baseProps = { fontSize: "small" as const };
-  
-  switch (type) {
-    case 'like':
-      return <ThumbUp {...baseProps} sx={{ color: '#1976d2' }} />;
-    case 'love':
-      return <Favorite {...baseProps} sx={{ color: '#e91e63' }} />;
-    case 'haha':
-      return <SentimentVerySatisfied {...baseProps} sx={{ color: '#ffc107' }} />;
-    case 'wow':
-      return <AutoAwesome {...baseProps} sx={{ color: '#ff9800' }} />;
-    case 'sad':
-      return <SentimentVeryDissatisfied {...baseProps} sx={{ color: '#2196f3' }} />;
-    case 'angry':
-      return <SentimentDissatisfied {...baseProps} sx={{ color: '#f44336' }} />;
-    default:
-      return <ThumbUp {...baseProps} sx={{ color: '#1976d2' }} />;
-  }
-};
 
 // Keep emoji for cases where they work (like the button)
 const REACTION_EMOJI_MAP: Record<ReactionType, string> = {

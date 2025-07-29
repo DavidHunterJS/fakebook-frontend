@@ -7,7 +7,6 @@ import {
   IconButton,
   Box,
   Avatar,
-  Badge,
   Divider,
   Menu,
   MenuItem,
