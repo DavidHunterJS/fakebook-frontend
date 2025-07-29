@@ -12,10 +12,9 @@ export interface PopulatedUser {
   lastName?: string;
   profilePicture?: string; // S3 key
   profileImage?: string; // S3 key (alternative or legacy)
-  // Add any other user fields that are populated (e.g., email, avatar, etc.)
 }
 
-export interface MediaItem { // THIS IS THE CORRECT TYPE FOR MEDIA ITEMS
+export interface MediaItem {
   url: string;
   key: string;
   type: string; // e.g., 'image', 'video'
@@ -24,33 +23,33 @@ export interface MediaItem { // THIS IS THE CORRECT TYPE FOR MEDIA ITEMS
 
 export interface PopulatedReply {
   _id: string;
-  user: PopulatedUser; // Populated user who made the reply
+  user: PopulatedUser;
   text: string;
-  likes: string[]; // User IDs who liked the reply
+  likes: string[];
   createdAt: string | Date;
   updatedAt: string | Date;
 }
 
-export interface Comment { // Exported as 'Comment' for CommentList.tsx
+export interface Comment {
   _id: string;
   text: string;
-  user: PopulatedUser | string; // User can be populated or just an ID
-  post: string; // ID of the parent post
-  likes: string[]; // User IDs who liked the comment
+  user: PopulatedUser | string;
+  post: string;
+  likes: string[];
   createdAt: string;
   updatedAt: string;
-  replies?: PopulatedReply[]; // If replies are populated as well
+  replies?: PopulatedReply[];
   reported?: boolean;
-  reportReasons?: IReportReason[]; // Now explicitly IReportReason[]
+  reportReasons?: IReportReason[];
 }
 
 
 // --- Post Interfaces (Based on your backend model and controller output) ---
 
-export interface IReportReason { // Exported as 'IReportReason'
-  user: User['_id'] | string; // user can be an ObjectId or string ID
+export interface IReportReason {
+  user: User['_id'] | string;
   reason: string;
-  date: Date | string; // date can be Date object or string
+  date: Date | string;
 }
 
 export interface IShare {
@@ -64,31 +63,41 @@ export enum PostVisibility {
   PRIVATE = 'private'
 }
 
+// --- NEW: Define the structure for the reaction summary from your API ---
+export interface ReactionSummary {
+  counts: Record<string, number>; // e.g., { love: 5, like: 12, haha: 2 }
+  currentUserReaction: string | null; // The logged-in user's reaction, or null
+}
+
 export interface Post {
   _id: string;
-  user: PopulatedUser; // Assumed populated by API
-  text: string; // Assumed required based on model, can be empty string
-  media?: MediaItem[]; // Corrected to MediaItem[]
-  visibility: PostVisibility; // Use the enum
-  likes: string[]; // Array of user IDs who liked the post (unpopulated)
-  comments: (string | Comment)[]; // <--- THIS IS THE CRUCIAL CHANGE
-  tags: PopulatedUser[]; // Assumed populated by API
-  reported: boolean; // Flag if the post is reported
-  reportReasons: IReportReason[]; // Array of report reason objects
-  createdAt: string; // ISO date string
-  updatedAt: string; // ISO date string
-
+  user: PopulatedUser;
+  text: string;
+  media?: MediaItem[];
+  visibility: PostVisibility;
+  // --- REMOVED: These are now replaced by reactionsSummary ---
+  // likes: string[];
+  // likesCount: number;
+  // isLiked: boolean;
+  comments: (string | Comment)[];
+  tags: PopulatedUser[];
+  reported: boolean;
+  reportReasons: IReportReason[];
+  createdAt: string;
+  updatedAt: string;
+  
   // Aggregated/calculated fields from backend
-  likesCount: number;
   commentsCount: number;
-  isLiked: boolean; // Specific to the viewing user
-  isSaved: boolean; // Specific to the viewing user
+  isSaved: boolean;
+  
+  // --- NEW: Add the reaction summary to the Post type ---
+  reactionsSummary?: ReactionSummary;
 
   // Optional fields from your Post model (if not always returned)
   pinned?: boolean;
-  originalPost?: string; // Assuming it's an ID string
-  sharedFrom?: string; // Assuming it's an ID string
-  shares?: IShare[]; // Array of share objects
+  originalPost?: string;
+  sharedFrom?: string;
+  shares?: IShare[];
 }
 
 export interface PostsResponse {
