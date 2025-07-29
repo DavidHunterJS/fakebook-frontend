@@ -411,6 +411,9 @@ const ProfilePage: React.FC = () => {
   }, [id, profile, makeApiRequest, currentUser, friendsInitialized, friends.length]);
 
   // Fetch photos function
+  // Inside your ProfilePage component...
+
+  // Fetch photos function
   const fetchPhotos = useCallback(async () => {
     if (!profile || typeof id !== 'string') return;
     if (photosInitialized && photosData.length > 0) {
@@ -433,7 +436,7 @@ const ProfilePage: React.FC = () => {
             const postsResponse = await makeApiRequest(`/posts/user/${id}`);
             if (postsResponse?.data?.posts || Array.isArray(postsResponse?.data)) {
                 postsForMedia = postsResponse.data.posts || postsResponse.data;
-                 setDebug(prev => [...prev, `Fetched ${postsForMedia.length} posts manually for media extraction`]);
+                setDebug(prev => [...prev, `Fetched ${postsForMedia.length} posts manually for media extraction`]);
             }
           }
         } catch (e) {
@@ -447,18 +450,18 @@ const ProfilePage: React.FC = () => {
           postsForMedia.forEach(post => {
             // Check if post.media exists and is an array with items
             if (post.media && Array.isArray(post.media) && post.media.length > 0) {
-              // --- FIX IS HERE ---
-              // The item in the forEach loop is a MediaItem, not a string
-              post.media.forEach((mediaItem: MediaItem) => { // Type 'mediaItem' as MediaItem
+              post.media.forEach((mediaItem: MediaItem) => { 
                 photosFromPosts.push({
-                  _id: `${post._id}-${mediaItem.key || mediaItem.url}`, // Use mediaItem.key or mediaItem.url for a unique ID
-                  url: getFullImageUrl(mediaItem.key || mediaItem.url, 'post'), // Use mediaItem.key or mediaItem.url
-                  filename: mediaItem.originalFilename || mediaItem.key || mediaItem.url, // Use originalFilename, or key, or url
-                  caption: post.text?.substring(0, 100) || '', // Use post.text based on your Post model, not post.content
+                  _id: `${post._id}-${mediaItem.key || mediaItem.url}`, 
+                  url: getFullImageUrl(mediaItem.key || mediaItem.url, 'post'), 
+                  filename: mediaItem.originalFilename || mediaItem.key || mediaItem.url,
+                  caption: post.text?.substring(0, 100) || '',
                   createdAt: post.createdAt || new Date().toISOString(),
                   postId: post._id,
-                  likes: post.likes?.length || 0,
-                  comments: post.comments?.length || 0 // Assuming comments is an array of IDs or populated objects
+                  // --- FIX IS HERE ---
+                  // Calculate total reactions by summing the values in the 'counts' object
+                  likes: Object.values(post.reactionsSummary?.counts || {}).reduce((sum, count) => sum + count, 0),
+                  comments: post.comments?.length || 0
                 });
               });
             }
@@ -475,7 +478,7 @@ const ProfilePage: React.FC = () => {
               album.photos.forEach((photo: AlbumPhoto) => {
                 photosFromAlbums.push({
                   _id: photo._id || `album-${album._id}-${photo.filename}`,
-                  url: getFullImageUrl(photo.filename, 'post'), // Assuming album photos are also 'post' type for URL
+                  url: getFullImageUrl(photo.filename, 'post'),
                   filename: photo.filename,
                   caption: photo.caption || album.title || '',
                   createdAt: (photo.createdAt || album.createdAt || new Date().toISOString()) as string,
@@ -503,6 +506,7 @@ const ProfilePage: React.FC = () => {
           createdAt: (profile.updatedAt || profile.createdAt || new Date().toISOString()) as string,
         });
       }
+      // Assuming 'coverPhoto' exists on your Profile type
       if (profile.coverPhoto && profile.coverPhoto !== 'default-cover.png') {
         profilePhotos.push({
           _id: `cover-${profile._id}`,
@@ -533,6 +537,7 @@ const ProfilePage: React.FC = () => {
       setLoadingPhotos(false);
     }
   }, [id, profile, posts, userPostsData, makeApiRequest, photosInitialized, photosData.length]);
+
 
 
   // Get grid columns function
