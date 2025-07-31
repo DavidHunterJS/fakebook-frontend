@@ -24,6 +24,11 @@ import {
 } from '@mui/material';
 import { HelpOutline } from '@mui/icons-material';
 
+// --- TYPE DEFINITIONS ---
+
+// Type for the form parameters state
+type ParameterValues = Record<string, string | number | boolean>;
+
 // Model configuration types
 interface SelectOption {
   value: string;
@@ -39,10 +44,10 @@ interface ParameterConfig {
   helperText?: string;
   tooltip?: string;
   options?: SelectOption[];
-  inputProps?: Record<string, any>;
+  inputProps?: Record<string, string | number>; // Replaced 'any'
   rows?: number;
   required?: boolean;
-  showWhen?: (params: Record<string, any>) => boolean;
+  showWhen?: (params: ParameterValues) => boolean; // Replaced 'any'
 }
 
 interface ModelConfig {
@@ -54,7 +59,7 @@ interface ModelConfig {
   endpoint: string;
 }
 
-// Model configurations
+// --- MODEL CONFIGURATIONS ---
 const MODEL_CONFIGS: ModelConfig[] = [
   {
     id: 'stable-diffusion-xl',
@@ -484,7 +489,7 @@ const MODEL_CONFIGS: ModelConfig[] = [
         inputProps: { step: 0.01, min: 0, max: 1 },
         helperText: '0.0 to 1.0 - Higher values make the reference image more influential',
         tooltip: 'Controls how strongly the reference image influences the generation. 0 = no influence, 1 = maximum influence.',
-        showWhen: (params) => params.image_reference && params.image_reference.trim() !== ''
+        showWhen: (params) => !!params.image_reference && String(params.image_reference).trim() !== ''
       },
       {
         name: 'style_reference',
@@ -502,7 +507,7 @@ const MODEL_CONFIGS: ModelConfig[] = [
         inputProps: { step: 0.01, min: 0, max: 1 },
         helperText: '0.0 to 1.0 - Higher values make the style reference more influential',
         tooltip: 'Controls how strongly the style reference influences the generation. 0 = no influence, 1 = maximum influence.',
-        showWhen: (params) => params.style_reference && params.style_reference.trim() !== ''
+        showWhen: (params) => !!params.style_reference && String(params.style_reference).trim() !== ''
       },
       {
         name: 'character_reference',
@@ -594,7 +599,7 @@ const MODEL_CONFIGS: ModelConfig[] = [
 
 export default function AIGeneratorPage() {
   const [selectedModelId, setSelectedModelId] = useState<string>('stable-diffusion-xl');
-  const [parameters, setParameters] = useState<Record<string, any>>({});
+  const [parameters, setParameters] = useState<ParameterValues>({}); // Use new type
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [images, setImages] = useState<string[]>([]);
@@ -605,8 +610,8 @@ export default function AIGeneratorPage() {
   const isTextModel = currentModel?.type === 'text';
 
   // Initialize parameters when model changes
-  const initializeParameters = (modelConfig: ModelConfig) => {
-    const initialParams: Record<string, any> = {};
+  const initializeParameters = (modelConfig: ModelConfig): ParameterValues => {
+    const initialParams: ParameterValues = {}; // Use new type
     modelConfig.parameters.forEach(param => {
       if (param.defaultValue !== undefined) {
         initialParams[param.name] = param.defaultValue;
@@ -659,14 +664,12 @@ export default function AIGeneratorPage() {
   const renderParameter = (paramConfig: ParameterConfig) => {
     const { name, label, type, placeholder, helperText, tooltip, options, inputProps, rows, required, showWhen } = paramConfig;
     
-    // Check if parameter should be shown
     if (showWhen && !showWhen(parameters)) {
       return null;
     }
 
     const value = parameters[name] ?? '';
 
-    // Create label with optional tooltip
     const labelWithTooltip = tooltip ? (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         {label}
@@ -720,8 +723,8 @@ export default function AIGeneratorPage() {
             <Select
               labelId={`${name}-label`}
               name={name}
-              value={value}
-              label={label} // Use original label for Select component
+              value={String(value)}
+              label={label}
               onChange={handleSelectChange}
             >
               {options?.map(option => (
@@ -801,8 +804,6 @@ export default function AIGeneratorPage() {
         parameters: filteredParams,
       };
       
-      console.log('Sending payload:', payload);
-      
       const apiUrl = `${process.env.NEXT_PUBLIC_BACKEND_BASE_URL}/api/${currentModel.endpoint}`;
       
       const response = await fetch(apiUrl, {
@@ -817,10 +818,9 @@ export default function AIGeneratorPage() {
         let errorMessage = `HTTP error! Status: ${response.status}`;
         try {
           const errorData = await response.json();
-          console.log('Error response:', errorData);
           errorMessage = errorData.error || errorData.message || errorMessage;
         } catch (parseError) {
-          console.log('Could not parse error response');
+            console.log(`Could not parse ${parseError}`);
         }
         throw new Error(errorMessage);
       }
@@ -839,7 +839,6 @@ export default function AIGeneratorPage() {
         setError(result.error || 'Generation failed.');
       }
     } catch (err) {
-      console.error('Frontend submission error:', err);
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred. Please check the console.';
       setError(errorMessage);
     } finally {
@@ -858,7 +857,7 @@ export default function AIGeneratorPage() {
     
     if (isTextModel && generatedText) {
       return (
-        <Paper elevation={3} sx={{ p: 3, maxHeight: '60vh', overflow: 'auto' }}>
+        <Paper elevation={3} sx={{ p: 3, maxHeight: '60vh', overflow: 'auto', width: '100%' }}>
           <Typography variant="h6" gutterBottom>
             Generated Text:
           </Typography>
@@ -874,7 +873,7 @@ export default function AIGeneratorPage() {
       return (
         <Grid container spacing={2}>
           {images.map((src, index) => (
-            <Grid key={index} size={{ xs: 12, sm: 6, md: 4 }}>
+            <Grid key={index}size={{xs:12, sm:6, md:4}}>
               <Box 
                 component="a" 
                 href={src} 
@@ -908,12 +907,12 @@ export default function AIGeneratorPage() {
     );
   };
 
-  // Group models by category for the select dropdown
   const groupedModels = MODEL_CONFIGS.reduce((acc, model) => {
-    if (!acc[model.category]) {
-      acc[model.category] = [];
+    const category = model.category;
+    if (!acc[category]) {
+      acc[category] = [];
     }
-    acc[model.category].push(model);
+    acc[category].push(model);
     return acc;
   }, {} as Record<string, ModelConfig[]>);
 
@@ -923,7 +922,7 @@ export default function AIGeneratorPage() {
         AI Content Generator 🎨🤖
       </Typography>
       <Grid container spacing={4}>
-        <Grid size={{ xs: 12, md: 4 }}>
+        <Grid size={{xs:12, sm:6, md:4}}>
           <Box 
             component="form" 
             onSubmit={handleSubmit} 
@@ -977,7 +976,7 @@ export default function AIGeneratorPage() {
           </Box>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 8 }}>
+        <Grid size={{xs:12, md:8}}>
           <Box sx={{ 
             display: 'flex', 
             justifyContent: 'center', 
