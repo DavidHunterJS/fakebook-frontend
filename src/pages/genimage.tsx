@@ -31,7 +31,7 @@ type ParameterValues = Record<string, string | number | boolean>;
 
 // Model configuration types
 interface SelectOption {
-  value: string;
+  value: string | number;
   label: string;
 }
 
@@ -44,10 +44,10 @@ interface ParameterConfig {
   helperText?: string;
   tooltip?: string;
   options?: SelectOption[];
-  inputProps?: Record<string, string | number>; // Replaced 'any'
+  inputProps?: Record<string, string | number>;
   rows?: number;
   required?: boolean;
-  showWhen?: (params: ParameterValues) => boolean; // Replaced 'any'
+  showWhen?: (params: ParameterValues) => boolean;
 }
 
 interface ModelConfig {
@@ -61,6 +61,7 @@ interface ModelConfig {
 
 // --- MODEL CONFIGURATIONS ---
 const MODEL_CONFIGS: ModelConfig[] = [
+  // --- EXISTING MODELS ---
   {
     id: 'stable-diffusion-xl',
     name: 'Stable Diffusion 3.5',
@@ -120,6 +121,108 @@ const MODEL_CONFIGS: ModelConfig[] = [
         type: 'text',
         placeholder: 'Leave blank for random',
         tooltip: 'Random seed for reproducible results. Use the same seed with the same prompt to get identical results.'
+      }
+    ]
+  },
+  {
+    id: 'stable-diffusion-inpainting',
+    name: 'Stable Diffusion Inpainting',
+    type: 'image',
+    category: 'Image Generation',
+    endpoint: 'generate-image-advanced',
+    parameters: [
+      {
+        name: 'prompt',
+        label: 'Prompt',
+        type: 'textarea',
+        placeholder: 'a vision of paradise. unreal engine',
+        tooltip: 'What to generate in the masked area.',
+        rows: 3
+      },
+      {
+        name: 'image',
+        label: 'Image URL',
+        type: 'text',
+        required: true,
+        placeholder: 'https://example.com/your-image.png',
+        tooltip: 'The initial image to inpaint on.'
+      },
+      {
+        name: 'mask',
+        label: 'Mask Image URL',
+        type: 'text',
+        required: true,
+        placeholder: 'https://example.com/your-mask.png',
+        tooltip: 'Black and white mask. White pixels are inpainted, black pixels are preserved.'
+      },
+      {
+        name: 'height',
+        label: 'Height',
+        type: 'select',
+        defaultValue: 512,
+        tooltip: 'Height of the generated image in pixels. Must be a multiple of 64.',
+        options: [64,128,192,256,320,384,448,512,576,640,704,768,832,896,960,1024].map(v => ({ value: v, label: `${v}px` }))
+      },
+      {
+        name: 'width',
+        label: 'Width',
+        type: 'select',
+        defaultValue: 512,
+        tooltip: 'Width of the generated image in pixels. Must be a multiple of 64.',
+        options: [64,128,192,256,320,384,448,512,576,640,704,768,832,896,960,1024].map(v => ({ value: v, label: `${v}px` }))
+      },
+      {
+        name: 'negative_prompt',
+        label: 'Negative Prompt',
+        type: 'textarea',
+        tooltip: 'Specify what you DON\'T want to see in the output.',
+        placeholder: 'e.g., blurry, low quality'
+      },
+      {
+        name: 'num_outputs',
+        label: 'Number of Images',
+        type: 'number',
+        defaultValue: 1,
+        inputProps: { min: 1, max: 4 },
+        tooltip: 'Number of images to generate.'
+      },
+      {
+        name: 'num_inference_steps',
+        label: 'Inference Steps',
+        type: 'number',
+        defaultValue: 50,
+        inputProps: { min: 1, max: 500 },
+        tooltip: 'Number of denoising steps.'
+      },
+      {
+        name: 'guidance_scale',
+        label: 'Guidance Scale',
+        type: 'number',
+        defaultValue: 7.5,
+        inputProps: { min: 1, max: 20, step: 0.1 },
+        tooltip: 'Scale for classifier-free guidance. Higher is more strict.'
+      },
+      {
+        name: 'scheduler',
+        label: 'Scheduler',
+        type: 'select',
+        defaultValue: 'DPMSolverMultistep',
+        tooltip: 'Choose a scheduler.',
+        options: ["DDIM","K_EULER","DPMSolverMultistep","K_EULER_ANCESTRAL","PNDM","KLMS"].map(v => ({ value: v, label: v }))
+      },
+      {
+        name: 'seed',
+        label: 'Seed (Optional)',
+        type: 'text',
+        placeholder: 'Leave blank for random',
+        tooltip: 'Random seed for reproducible results.'
+      },
+      {
+        name: 'disable_safety_checker',
+        label: 'Disable Safety Checker',
+        type: 'switch',
+        defaultValue: false,
+        tooltip: 'Disable safety checker for generated images. Only available via API.'
       }
     ]
   },
@@ -599,7 +702,7 @@ const MODEL_CONFIGS: ModelConfig[] = [
 
 export default function AIGeneratorPage() {
   const [selectedModelId, setSelectedModelId] = useState<string>('stable-diffusion-xl');
-  const [parameters, setParameters] = useState<ParameterValues>({}); // Use new type
+  const [parameters, setParameters] = useState<ParameterValues>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [images, setImages] = useState<string[]>([]);
@@ -611,7 +714,7 @@ export default function AIGeneratorPage() {
 
   // Initialize parameters when model changes
   const initializeParameters = (modelConfig: ModelConfig): ParameterValues => {
-    const initialParams: ParameterValues = {}; // Use new type
+    const initialParams: ParameterValues = {};
     modelConfig.parameters.forEach(param => {
       if (param.defaultValue !== undefined) {
         initialParams[param.name] = param.defaultValue;
@@ -650,7 +753,7 @@ export default function AIGeneratorPage() {
     }));
   };
 
-  const handleSelectChange = (e: SelectChangeEvent<string>) => {
+  const handleSelectChange = (e: SelectChangeEvent<string | number>) => {
     const { name, value } = e.target;
     setParameters(prev => ({ ...prev, [name]: value }));
   };
@@ -728,7 +831,7 @@ export default function AIGeneratorPage() {
               onChange={handleSelectChange}
             >
               {options?.map(option => (
-                <MenuItem key={option.value} value={option.value}>
+                <MenuItem key={String(option.value)} value={option.value}>
                   {option.label}
                 </MenuItem>
               ))}
@@ -779,9 +882,9 @@ export default function AIGeneratorPage() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!parameters.prompt) {
-      setError('Prompt is a required field.');
-      return;
+    if (currentModel?.parameters.some(p => p.required && !parameters[p.name])) {
+       setError('Please fill in all required fields.');
+       return;
     }
 
     if (!currentModel) {
@@ -796,7 +899,7 @@ export default function AIGeneratorPage() {
 
     try {
       const filteredParams = Object.fromEntries(
-        Object.entries(parameters).filter(([, value]) => value !== '' && value !== undefined)
+        Object.entries(parameters).filter(([, value]) => value !== '' && value !== undefined && value !== null)
       );
       
       const payload = {
@@ -820,7 +923,7 @@ export default function AIGeneratorPage() {
           const errorData = await response.json();
           errorMessage = errorData.error || errorData.message || errorMessage;
         } catch (parseError) {
-            console.log(`Could not parse ${parseError}`);
+            // Could not parse, use default message
         }
         throw new Error(errorMessage);
       }
@@ -873,7 +976,7 @@ export default function AIGeneratorPage() {
       return (
         <Grid container spacing={2}>
           {images.map((src, index) => (
-            <Grid key={index}size={{xs:12, sm:6, md:4}}>
+            <Grid key={index} size={{xs:12, sm:6, md:4}}>
               <Box 
                 component="a" 
                 href={src} 
@@ -922,7 +1025,7 @@ export default function AIGeneratorPage() {
         AI Content Generator 🎨🤖
       </Typography>
       <Grid container spacing={4}>
-        <Grid size={{xs:12, sm:6, md:4}}>
+        <Grid size={{xs:12,md:4}}>
           <Box 
             component="form" 
             onSubmit={handleSubmit} 
