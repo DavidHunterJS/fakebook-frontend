@@ -9,12 +9,14 @@ import seeDream3 from './seeDream3';
 import reCraft3 from './reCraft3';
 import lumaPhoton from './lumaPhoton';
 import claude4 from './claude4';
+import stableDiffusionInpainting from './stableDiffusionInpainting';
 // Import other models here later, e.g.:
 // import midjourneyStyle from './midjourneyStyle'; 
 
 // Combine all models into a single array
 export const MODEL_CONFIGS: ModelConfig[] = [
   stableDiffusionXL,
+  stableDiffusionInpainting,
   openJourney,
   fluxSchnell,
   imagen4,
