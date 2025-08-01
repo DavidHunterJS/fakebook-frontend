@@ -8,6 +8,8 @@ import {
   People as PeopleIcon,
   Bookmark as BookmarkIcon,
   Event as EventIcon,
+  Build as BuildIcon,
+
 } from '@mui/icons-material';
 import Link from 'next/link';
 import useAuth from '../../hooks/useAuth';
@@ -65,12 +67,14 @@ const Sidebar = () => {
           </ListItem>
           
           <ListItem disablePadding>
-            <ListItemButton sx={{ borderRadius: 1, mb: 1 }}>
-              <ListItemIcon>
-                <EventIcon />
-              </ListItemIcon>
-              <ListItemText primary="Events" />
-            </ListItemButton>
+            <Link href="/aitoolbox" style={{ textDecoration: 'none', width: '100%', color: 'inherit' }}>
+              <ListItemButton sx={{ borderRadius: 1, mb: 1 }}>
+                <ListItemIcon>
+                  <BuildIcon />
+                </ListItemIcon>
+                <ListItemText primary="AI Toolbox" />
+              </ListItemButton>
+            </Link>
           </ListItem>
         </List>
       </Box>
