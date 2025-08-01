@@ -1,23 +1,31 @@
 import React, { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Card, CardHeader, CardContent, CardMedia, Button, Avatar, Typography, IconButton, Box, Menu, MenuItem, Divider, Modal } from '@mui/material';
-import { Comment as CommentIcon, MoreVert as MoreVertIcon, Delete as DeleteIcon, Edit as EditIcon, Public as PublicIcon, People as PeopleIcon, Lock as LockIcon } from '@mui/icons-material';
+import { 
+  Comment as CommentIcon, 
+  MoreVert as MoreVertIcon, 
+  Delete as DeleteIcon, 
+  Edit as EditIcon, 
+  Public as PublicIcon, 
+  People as PeopleIcon, 
+  Lock as LockIcon,
+  BookmarkBorder as BookmarkBorderIcon, // <-- Import Save Icon
+  Bookmark as BookmarkIcon // <-- Import Unsave Icon
+} from '@mui/icons-material';
 import Link from 'next/link';
-import { Post, PostVisibility } from '../../types/post'; // Assuming Post type includes reactionsSummary
+import { Post, PostVisibility } from '../../types/post';
 import CommentForm from './CommentForm';
 import CommentList from './CommentList';
 import useAuth from '../../hooks/useAuth';
-import { useDeletePost } from '../../hooks/usePosts';
+import { useDeletePost, useSavePost, useUnsavePost } from '../../hooks/usePosts'; // <-- Import save/unsave hooks
 import { getFullImageUrl } from '../../utils/imgUrl';
 import PostForm from './PostForm';
-import ReactionSelector from './ReactionSelector'; // Make sure the path is correct
+import ReactionSelector from './ReactionSelector';
 
 interface PostCardProps {
   post: Post;
 }
 
-// This type should ideally be in a shared types file, but defining it here
-// helps resolve the type error for this component.
 type ReactionType = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry';
 
 const getVisibilityIcon = (visibility: PostVisibility) => {
@@ -38,6 +46,9 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
   const deleteMutation = useDeletePost();
+  const saveMutation = useSavePost(); // <-- Use the save hook
+  const unsaveMutation = useUnsavePost(); // <-- Use the unsave hook
+
   const { user: postUser } = post;
   const isAuthor = currentUser && postUser && postUser._id === currentUser._id;
   
@@ -48,40 +59,64 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
   const handleDeletePost = () => { if (!post._id) return; deleteMutation.mutate(post._id); handleMenuClose(); };
   const handleCommentClick = () => setShowComments(!showComments);
 
+  // --- ✅ Handlers for Save/Unsave ---
+  const handleSavePost = () => {
+    if (!post._id) return;
+    saveMutation.mutate(post._id);
+    handleMenuClose();
+  };
+
+  const handleUnsavePost = () => {
+    if (!post._id) return;
+    unsaveMutation.mutate(post._id);
+    handleMenuClose();
+  };
+
   if (!postUser) return <Card sx={{ mb: 3, p: 2 }}><Typography>Error loading post author.</Typography></Card>;
 
   const authorAvatarUrl = getFullImageUrl(postUser.profilePicture, 'profile');
   const postImageUrl = post.media?.[0]?.url ? getFullImageUrl(post.media[0].url, 'post') : null;
 
-  const defaultCounts = {       like: 0,
-      love: 0,
-      haha: 0,
-      wow: 0,
-      sad: 0,
-      angry: 0,
-      care: 0,
-      clap: 0,
-      fire: 0,
-      thinking: 0,
-      celebrate: 0,
-      mind_blown: 0,
-      heart_eyes: 0,
-      laugh_cry: 0,
-      shocked: 0,
-      cool: 0,
-      party: 0,
-      thumbs_down: 0 };
+  const defaultCounts = { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0, care: 0, clap: 0, fire: 0, thinking: 0, celebrate: 0, mind_blown: 0, heart_eyes: 0, laugh_cry: 0, shocked: 0, cool: 0, party: 0, thumbs_down: 0 };
   const initialCounts = { ...defaultCounts, ...(post.reactionsSummary?.counts || {}) };
   
-  // --- FIX: Use a type assertion to cast the string to the specific ReactionType ---
-  // This tells TypeScript to trust that the string from the API will be one of the valid reaction types.
   const initialUserReaction = (post.reactionsSummary?.currentUserReaction as ReactionType) || null;
 
   return (
     <Card sx={{ mb: 3 }}>
       <CardHeader
         avatar={ <Link href={`/profile/${postUser._id}`} passHref legacyBehavior><Avatar src={authorAvatarUrl} alt={postUser.username} sx={{ cursor: 'pointer' }} component="a" /></Link> }
-        action={ isAuthor && (<> <IconButton aria-label="settings" onClick={handleMenuOpen}> <MoreVertIcon /> </IconButton> <Menu anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={handleMenuClose}> <MenuItem onClick={handleEditClick}><EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit</MenuItem> <MenuItem onClick={handleDeletePost} disabled={deleteMutation.isPending}><DeleteIcon fontSize="small" sx={{ mr: 1 }} /> {deleteMutation.isPending ? 'Deleting...' : 'Delete'} </MenuItem> </Menu> </>)}
+        action={
+          // --- ✅ Show menu for any logged-in user ---
+          currentUser && (
+            <>
+              <IconButton aria-label="settings" onClick={handleMenuOpen}>
+                <MoreVertIcon />
+              </IconButton>
+              <Menu anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={handleMenuClose}>
+                {/* --- ✅ Author-specific options --- */}
+                {isAuthor && [
+                  <MenuItem key="edit" onClick={handleEditClick}><EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit</MenuItem>,
+                  <MenuItem key="delete" onClick={handleDeletePost} disabled={deleteMutation.isPending}><DeleteIcon fontSize="small" sx={{ mr: 1 }} /> {deleteMutation.isPending ? 'Deleting...' : 'Delete'}</MenuItem>,
+                  <Divider key="divider" />
+                ]}
+                
+                {/* --- ✅ Conditional Save/Unsave Button --- */}
+                {post.isSaved ? (
+                  <MenuItem onClick={handleUnsavePost} disabled={unsaveMutation.isPending}>
+                    <BookmarkIcon fontSize="small" sx={{ mr: 1 }} />
+                    {unsaveMutation.isPending ? 'Unsaving...' : 'Unsave Post'}
+                  </MenuItem>
+                ) : (
+                  <MenuItem onClick={handleSavePost} disabled={saveMutation.isPending}>
+                    <BookmarkBorderIcon fontSize="small" sx={{ mr: 1 }} />
+                    {saveMutation.isPending ? 'Saving...' : 'Save Post'}
+                  </MenuItem>
+                )}
+              </Menu>
+            </>
+          )
+        }
         title={ <Link href={`/profile/${postUser._id}`} passHref legacyBehavior><Typography variant="subtitle1" component="span" sx={{ fontWeight: 'bold', cursor: 'pointer', color: 'text.primary', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>{postUser.firstName ? `${postUser.firstName} ${postUser.lastName || ''}`.trim() : postUser.username}</Typography></Link> }
         subheader={ <Box sx={{ display: 'flex', alignItems: 'center', color: 'text.secondary', fontSize: '0.875rem' }}>{post.createdAt ? formatDistanceToNow(new Date(post.createdAt), { addSuffix: true }) : 'Unknown date'}<Typography component="span" sx={{ mx: 0.5 }}>·</Typography>{getVisibilityIcon(post.visibility)}</Box> }
       />

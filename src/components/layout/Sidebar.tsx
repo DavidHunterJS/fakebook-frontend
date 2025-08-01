@@ -1,3 +1,5 @@
+// src/components/Sidebar.tsx
+
 import React from 'react';
 import { Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Paper } from '@mui/material';
 import {
@@ -50,13 +52,16 @@ const Sidebar = () => {
             </Link>
           </ListItem>
           
+          {/* --- ✅ UPDATED THIS SECTION --- */}
           <ListItem disablePadding>
-            <ListItemButton sx={{ borderRadius: 1, mb: 1 }}>
-              <ListItemIcon>
-                <BookmarkIcon />
-              </ListItemIcon>
-              <ListItemText primary="Saved" />
-            </ListItemButton>
+            <Link href="/saved" style={{ textDecoration: 'none', width: '100%', color: 'inherit' }}>
+              <ListItemButton sx={{ borderRadius: 1, mb: 1 }}>
+                <ListItemIcon>
+                  <BookmarkIcon />
+                </ListItemIcon>
+                <ListItemText primary="Saved" />
+              </ListItemButton>
+            </Link>
           </ListItem>
           
           <ListItem disablePadding>
