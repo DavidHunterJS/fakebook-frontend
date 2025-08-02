@@ -26,14 +26,13 @@ import {
 } from '@mui/material';
 import { HelpOutline } from '@mui/icons-material';
 import { MODEL_CONFIGS, ModelConfig, ParameterConfig } from '../ai-models';
+import { InpaintingCanvas } from '../components/InpaintingCanvas'; // Import the canvas component
 
 // Model configuration types
 interface SelectOption {
   value: string;
   label: string;
 }
-
-
 
 export default function AIGeneratorPage() {
   const [selectedModelId, setSelectedModelId] = useState<string>('stable-diffusion-xl');
@@ -42,10 +41,15 @@ export default function AIGeneratorPage() {
   const [error, setError] = useState<string | null>(null);
   const [images, setImages] = useState<string[]>([]);
   const [generatedText, setGeneratedText] = useState<string>('');
+  
+  // New state for inpainting
+  const [canvasImageUrl, setCanvasImageUrl] = useState<string>('');
+  const [canvasMaskUrl, setCanvasMaskUrl] = useState<string>('');
 
   const currentModel = MODEL_CONFIGS.find(model => model.id === selectedModelId);
   const isImageModel = currentModel?.type === 'image';
   const isTextModel = currentModel?.type === 'text';
+  const isInpaintingModel = selectedModelId === 'stable-diffusion-inpainting';
 
   // Initialize parameters when model changes
   const initializeParameters = (modelConfig: ModelConfig) => {
@@ -65,6 +69,17 @@ export default function AIGeneratorPage() {
     }
   }, [currentModel, parameters]);
 
+  // Update parameters when inpainting canvas changes
+  useEffect(() => {
+    if (isInpaintingModel && canvasImageUrl && canvasMaskUrl) {
+      setParameters(prev => ({
+        ...prev,
+        image: canvasImageUrl,
+        mask: canvasMaskUrl
+      }));
+    }
+  }, [isInpaintingModel, canvasImageUrl, canvasMaskUrl]);
+
   const handleModelChange = (e: SelectChangeEvent<string>) => {
     const newModelId = e.target.value;
     const newModel = MODEL_CONFIGS.find(model => model.id === newModelId);
@@ -78,6 +93,12 @@ export default function AIGeneratorPage() {
     setImages([]);
     setGeneratedText('');
     setError(null);
+    
+    // Clear canvas URLs when switching away from inpainting
+    if (newModelId !== 'stable-diffusion-inpainting') {
+      setCanvasImageUrl('');
+      setCanvasMaskUrl('');
+    }
   };
 
   const handleParamChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -98,12 +119,26 @@ export default function AIGeneratorPage() {
     setParameters(prev => ({ ...prev, [name]: checked }));
   };
 
+  // Canvas handlers for inpainting
+  const handleCanvasImageChange = (imageUrl: string) => {
+    setCanvasImageUrl(imageUrl);
+  };
+
+  const handleCanvasMaskChange = (maskUrl: string) => {
+    setCanvasMaskUrl(maskUrl);
+  };
+
   // Render a single parameter field with tooltip
   const renderParameter = (paramConfig: ParameterConfig) => {
     const { name, label, type, placeholder, helperText, tooltip, options, inputProps, rows, required, showWhen } = paramConfig;
     
     // Check if parameter should be shown
     if (showWhen && !showWhen(parameters)) {
+      return null;
+    }
+
+    // Skip rendering image and mask fields for inpainting model (handled by canvas)
+    if (isInpaintingModel && (name === 'image' || name === 'mask')) {
       return null;
     }
 
@@ -227,6 +262,18 @@ export default function AIGeneratorPage() {
     if (!currentModel) {
       setError('No model selected.');
       return;
+    }
+
+    // Additional validation for inpainting
+    if (isInpaintingModel) {
+      if (!canvasImageUrl) {
+        setError('Please upload a base image using the canvas.');
+        return;
+      }
+      if (!canvasMaskUrl) {
+        setError('Please create a mask by painting on the canvas.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -421,11 +468,21 @@ export default function AIGeneratorPage() {
         </Grid>
 
         <Grid size={{ xs: 12, md: 8 }}>
+          {/* Show inpainting canvas only for inpainting model */}
+          {isInpaintingModel && (
+            <InpaintingCanvas
+              onImageChange={handleCanvasImageChange}
+              onMaskChange={handleCanvasMaskChange}
+
+            />
+          )}
+          
+          {/* Results section */}
           <Box sx={{ 
             display: 'flex', 
             justifyContent: 'center', 
             alignItems: 'center', 
-            minHeight: '60vh', 
+            minHeight: isInpaintingModel ? '40vh' : '60vh', 
             border: '2px dashed', 
             borderColor: 'grey.300', 
             borderRadius: 2, 

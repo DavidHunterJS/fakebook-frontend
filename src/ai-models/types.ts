@@ -27,4 +27,5 @@ export interface ModelConfig {
   category: string;
   parameters: ParameterConfig[];
   endpoint: string;
+  model?: string;
 }
