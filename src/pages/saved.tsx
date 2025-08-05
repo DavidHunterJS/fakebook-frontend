@@ -23,7 +23,7 @@ const SavedPostsPage = () => {
     }
 
     if (!posts || posts.length === 0) {
-      return <Typography>You haven't saved any posts yet.</Typography>;
+      return <Typography>You haven&apos;t saved any posts yet.</Typography>;
     }
 
     return (

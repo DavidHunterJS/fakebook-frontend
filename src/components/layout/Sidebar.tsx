@@ -7,7 +7,6 @@ import {
   Person as PersonIcon,
   People as PeopleIcon,
   Bookmark as BookmarkIcon,
-  Event as EventIcon,
   Build as BuildIcon,
 
 } from '@mui/icons-material';

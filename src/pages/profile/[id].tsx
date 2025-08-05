@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
-import { useMediaQuery, useTheme } from '@mui/material';
 import { useGetUserPosts } from '../../hooks/usePosts'; // Ensure this path is correct
 import {
   Container,
@@ -14,22 +13,11 @@ import {
   Tab,
   CircularProgress,
   Alert,
-  TextField,
-  Grid,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  IconButton,
+
 } from '@mui/material';
 import {
-  PersonAdd as PersonAddIcon,
   Edit as EditIcon,
-  Person as PersonIcon,
-  Image as ImageIcon,
-  Favorite as LikeIcon,
-  Comment as CommentIcon,
-  Close as CloseIcon,
+
 } from '@mui/icons-material';
 import useAuth from '../../hooks/useAuth'; // Adjust path if needed
 import api from '../../utils/api'; // Adjust path if needed
@@ -40,7 +28,6 @@ import {getFullImageUrl}  from '../../utils/imgUrl'; // Adjust the path as neede
 // NEW FOLLOW SYSTEM IMPORTS
 import FollowButton from '../../components/follow/FollowButton';
 import ProfileStats from '../../components//follow/ProfileStats';
-import SuggestedUsers from '../../components/follow/SuggestedUsers';
 import FollowersList from '../../components/follow/FollowersList';
 import AboutTab from  './tabs/AboutTab';
 import PostsTab from './tabs/PostsTab';
@@ -72,12 +59,7 @@ interface FriendUser extends User {
   isFollowing?: boolean;
 }
 
-// Add a suggested friends interface
-interface SuggestedFriend extends User {
-  mutualFriendsCount?: number;
-  isRequested?: boolean;
-  isFollowing?: boolean;
-}
+
 
 // Interface for profile data
 interface Profile extends User {
@@ -136,9 +118,6 @@ const ProfilePage: React.FC = () => {
   const router = useRouter();
   const { id } = router.query; // 'id' is now correctly scoped
   const { user: currentUser, isAuthenticated } = useAuth();
-  const theme = useTheme();
-  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
-  const isMediumScreen = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
   // React Query hook to fetch user posts (for the "Posts" tab)
   const {
@@ -160,45 +139,31 @@ const ProfilePage: React.FC = () => {
   const [debug, setDebug] = useState<string[]>([]);
 
   // Friends data
-  const [friends, setFriends] = useState<FriendUser[]>([]);
-  const [loadingFriends, setLoadingFriends] = useState(false);
-  const [friendsError, setFriendsError] = useState<string | null>(null);
-  const [friendsInitialized, setFriendsInitialized] = useState(false);
+  const [, setFriends] = useState<FriendUser[]>([]);
+  const [, setFriendsInitialized] = useState(false);
 
   // Photos data
   const [photosData, setPhotosData] = useState<Photo[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
-  const [photosError, setPhotosError] = useState<string | null>(null);
+  const [, setPhotosError] = useState<string | null>(null);
   const [photosInitialized, setPhotosInitialized] = useState(false);
 
   // Bio editing state
-  const [isEditingBio, setIsEditingBio] = useState(false);
-  const [bioValue, setBioValue] = useState('');
-  const [savingBio, setSavingBio] = useState(false);
-  const [bioError, setBioError] = useState<string | null>(null);
+  const [, setBioValue] = useState('');
 
   // Basic info editing state
-  const [isEditingBasicInfo, setIsEditingBasicInfo] = useState(false);
-  const [basicInfoValues, setBasicInfoValues] = useState({
+  const [, setBasicInfoValues] = useState({
     firstName: '',
     lastName: '',
     location: ''
   });
-  const [savingBasicInfo, setSavingBasicInfo] = useState(false);
-  const [basicInfoError, setBasicInfoError] = useState<string | null>(null);
 
   // Work and Education editing state
-  const [isEditingWorkEdu, setIsEditingWorkEdu] = useState(false);
-  const [workEduValues, setWorkEduValues] = useState({
+  const [, setWorkEduValues] = useState({
     work: '',
     education: ''
   });
-  const [savingWorkEdu, setSavingWorkEdu] = useState(false);
-  const [workEduError, setWorkEduError] = useState<string | null>(null);
 
-  // Photo upload state
-  const [photoUploadOpen, setPhotoUploadOpen] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
 
   // API request helper - memoized with useCallback
   const makeApiRequest = useCallback(async (url: string, method: 'get' | 'post' | 'put' | 'delete' = 'get', data?: unknown) => {
@@ -228,145 +193,7 @@ const ProfilePage: React.FC = () => {
     }
   }, []); // setDebug is stable, so often omitted. Add if linting requires.
 
-  // Handle sending a friend request
-  const handleSendFriendRequest = useCallback(async (userId: string) => {
-    if (!isAuthenticated || !currentUser) return;
-    
-    try {
-      await makeApiRequest(`/friends/request/${userId}`, 'post');
-      setDebug(prev => [...prev, `Friend request sent to user ${userId}`]);
-    } catch (error: unknown) {
-      const err = error as ApiError;
-      console.error('Error sending friend request:', err);
-      setDebug(prev => [...prev, `Error sending friend request to ${userId}: ${err.message}`]);
-    }
-  }, [isAuthenticated, currentUser, makeApiRequest]);
-
-  // Fetch friends function
-  const fetchFriends = useCallback(async () => {
-    if (!profile || typeof id !== 'string') return;
-
-    if (friendsInitialized && friends.length > 0) {
-      setDebug(prev => [...prev, `Friends already initialized (${friends.length} friends), skipping fetch`]);
-      return;
-    }
-
-    const profileFriends = profile.friends;
-    if (profileFriends && Array.isArray(profileFriends) && profileFriends.length > 0) {
-      setDebug(prev => [...prev, `Using ${profileFriends.length} friends already loaded in profile data`]);
-      const friendsList = profileFriends as FriendUser[];
-      if (currentUser) {
-        const friendsWithFollowingStatus = friendsList.map(friend => {
-          if (friend.isFollowing !== undefined) return friend;
-          const isFollowing = currentUser.following && Array.isArray(currentUser.following) ?
-            currentUser.following.some(followedId => String(followedId) === String(friend._id)) :
-            false;
-          return { ...friend, isFollowing };
-        });
-        setFriends(friendsWithFollowingStatus);
-      } else {
-        setFriends(friendsList);
-      }
-      setFriendsInitialized(true);
-      return;
-    }
-
-    setLoadingFriends(true);
-    setFriendsError(null);
-    try {
-      if (currentUser && profile._id === currentUser._id) {
-        setDebug(prev => [...prev, `Fetching own friends from /friends endpoint`]);
-        try {
-          const response = await makeApiRequest('/friends');
-          if (response?.data && response.data.friends) {
-            const friendsData = response.data.friends;
-            setDebug(prev => [...prev, `Found ${friendsData.length} friends via /friends endpoint`]);
-            setFriends(friendsData);
-            setFriendsInitialized(true);
-            setLoadingFriends(false);
-            return;
-          }
-        } catch (e) {
-          const error = e as Error;
-          setDebug(prev => [...prev, `Failed to get friends from /friends endpoint, trying alternative: ${error.message}`]);
-        }
-      }
-
-      try {
-        setDebug(prev => [...prev, `Trying to get user profile with friends using /users/${id}`]);
-        const response = await makeApiRequest(`/users/${id}`);
-        if (response?.data) {
-          const userData = response.data;
-          if (userData.friends && Array.isArray(userData.friends) && userData.friends.length > 0) {
-            setDebug(prev => [...prev, `Found ${userData.friends.length} friends in user data`]);
-            if (currentUser) {
-              const friendsWithFollowingStatus = userData.friends.map((friend: FriendUser) => {
-                if (friend.isFollowing !== undefined) return friend;
-                const isFollowing = currentUser.following && Array.isArray(currentUser.following) ?
-                  currentUser.following.some(followedId => String(followedId) === String(friend._id)) :
-                  false;
-                return { ...friend, isFollowing };
-              });
-              setFriends(friendsWithFollowingStatus);
-            } else {
-              setFriends(userData.friends);
-            }
-            setFriendsInitialized(true);
-            setLoadingFriends(false);
-            return;
-          }
-        }
-      } catch (e) {
-        const error = e as Error;
-        setDebug(prev => [...prev, `Failed to get user profile with friends included: ${error.message}`]);
-      }
-
-      if (currentUser && profile._id !== currentUser._id) {
-        try {
-          setDebug(prev => [...prev, `Trying to get mutual friends using /friends/mutual/${id}`]);
-          const response = await makeApiRequest(`/friends/mutual/${id}`);
-          if (response?.data) {
-            const mutualFriends = Array.isArray(response.data) ? response.data :
-                                  (response.data.friends || []);
-            if (mutualFriends.length >= 0) {
-              setDebug(prev => [...prev, `Found ${mutualFriends.length} mutual friends`]);
-              if (currentUser) {
-                const friendsWithFollowingStatus = mutualFriends.map((friend: FriendUser) => {
-                  if (friend.isFollowing !== undefined) return friend;
-                  const isFollowing = currentUser.following && Array.isArray(currentUser.following) ?
-                    currentUser.following.some(followedId => String(followedId) === String(friend._id)) :
-                    false;
-                  return { ...friend, isFollowing };
-                });
-                setFriends(friendsWithFollowingStatus);
-              } else {
-                setFriends(mutualFriends);
-              }
-              setFriendsInitialized(true);
-              setLoadingFriends(false);
-              return;
-            }
-          }
-        } catch (e) {
-          const error = e as Error;
-          setDebug(prev => [...prev, `Failed to get mutual friends: ${error.message}`]);
-        }
-      }
-      setDebug(prev => [...prev, 'No friends data found from any endpoint']);
-      setFriends([]);
-      setFriendsInitialized(true);
-    } catch (error: unknown) {
-      const err = error as ApiError;
-      console.error('Error fetching friends:', err);
-      setFriendsError(err.response?.data?.message || err.message || 'Failed to load friends.');
-      setDebug(prev => [...prev, `Error fetching friends: ${err.message}`]);
-      setFriends([]);
-      setFriendsInitialized(true);
-    } finally {
-      setLoadingFriends(false);
-    }
-  }, [id, profile, makeApiRequest, currentUser, friendsInitialized, friends.length]);
-
+  
   // Fetch photos function
   const fetchPhotos = useCallback(async () => {
     if (!profile || typeof id !== 'string') return;
@@ -492,176 +319,13 @@ const ProfilePage: React.FC = () => {
     }
   }, [id, profile, posts, userPostsData, makeApiRequest, photosInitialized, photosData.length]);
 
-  // Get grid columns function
-  const getGridCols = useCallback(() => {
-    if (isSmallScreen) return 2;
-    if (isMediumScreen) return 3;
-    return 4;
-  }, [isSmallScreen, isMediumScreen]);
-
-  // Photo click handler
-  const handlePhotoClick = useCallback((photo: Photo) => {
-    if (photo.postId) {
-      router.push(`/posts/${photo.postId}`);
-    }
-    else if (photo.albumId) {
-      router.push(`/album/${photo.albumId}`);
-    }
-    else {
-      window.open(photo.url, '_blank');
-    }
-  }, [router]);
-
-  // Handle bio save
-  const handleSaveBio = useCallback(async () => {
-    if (!currentUser || !profile) return;
-    setSavingBio(true);
-    setBioError(null);
-    try {
-      await makeApiRequest('/users/profile', 'put', { bio: bioValue });
-      setDebug(prev => [...prev, `Bio updated successfully to: ${bioValue}`]);
-      setProfile(prevProfile => {
-        if (!prevProfile) return null;
-        return { ...prevProfile, bio: bioValue };
-      });
-      setIsEditingBio(false);
-    } catch (error: unknown) {
-      const err = error as ApiError;
-      console.error('Error updating bio:', );
-      setBioError(err.response?.data?.message || err.message || 'Failed to update bio.');
-      setDebug(prev => [...prev, `Error updating bio: ${err.response?.data?.message || err.message || 'Failed to update bio.'}`]);
-    } finally {
-      setSavingBio(false);
-    }
-  }, [currentUser, profile, bioValue, makeApiRequest]);
-
-  // Handle cancel bio edit
-  const handleCancelEditBio = useCallback(() => {
-    setIsEditingBio(false);
-    setBioValue(profile?.bio || '');
-    setBioError(null);
-  }, [profile]);
-
-  // Handle save basic info
-  const handleSaveBasicInfo = useCallback(async () => {
-    if (!currentUser || !profile) return;
-    setSavingBasicInfo(true);
-    setBasicInfoError(null);
-    try {
-      await makeApiRequest('/users/profile', 'put', basicInfoValues);
-      setDebug(prev => [...prev, `Basic info updated successfully: ${JSON.stringify(basicInfoValues)}`]);
-      setProfile(prevProfile => {
-        if (!prevProfile) return null;
-        return { ...prevProfile, ...basicInfoValues };
-      });
-      setIsEditingBasicInfo(false);
-    } catch (error: unknown) {
-      const err = error as ApiError;
-      console.error('Error updating basic info:', err);
-      setBasicInfoError(err.response?.data?.message || err.message || 'Failed to update information.');
-      setDebug(prev => [...prev, `Error updating basic info: ${err.response?.data?.message || err.message || 'Failed to update information.'}`]);
-    } finally {
-      setSavingBasicInfo(false);
-    }
-  }, [currentUser, profile, basicInfoValues, makeApiRequest]);
-
-  // Handle cancel basic info edit
-  const handleCancelEditBasicInfo = useCallback(() => {
-    setIsEditingBasicInfo(false);
-    if (profile) {
-      setBasicInfoValues({
-        firstName: profile.firstName || '',
-        lastName: profile.lastName || '',
-        location: profile.location || ''
-      });
-    }
-    setBasicInfoError(null);
-  }, [profile]);
-
-  // Handle save work and education
-  const handleSaveWorkEdu = useCallback(async () => {
-    if (!currentUser || !profile) return;
-    setSavingWorkEdu(true);
-    setWorkEduError(null);
-    try {
-      await makeApiRequest('/users/profile', 'put', workEduValues);
-      setDebug(prev => [...prev, `Work and education updated successfully: ${JSON.stringify(workEduValues)}`]);
-      setProfile(prevProfile => {
-        if (!prevProfile) return null;
-        return { ...prevProfile, ...workEduValues };
-      });
-      setIsEditingWorkEdu(false);
-    } catch (error: unknown) {
-      const err = error as ApiError;
-      console.error('Error updating work and education:', err);
-      setWorkEduError(err.response?.data?.message || err.message || 'Failed to update work and education.');
-      setDebug(prev => [...prev, `Error updating work and education: ${err.response?.data?.message || err.message || 'Failed to update work and education.'}`]);
-    } finally {
-      setSavingWorkEdu(false);
-    }
-  }, [currentUser, profile, workEduValues, makeApiRequest]);
-
-  // Handle cancel work and education edit
-  const handleCancelEditWorkEdu = useCallback(() => {
-    setIsEditingWorkEdu(false);
-    if (profile) {
-      setWorkEduValues({
-        work: profile.work || '',
-        education: profile.education || ''
-      });
-    }
-    setWorkEduError(null);
-  }, [profile]);
+  
 
   // Handle tab change
   const handleTabChange = useCallback((event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   }, []);
 
-  // Handle opening the photo upload dialog
-  const handleOpenPhotoUpload = useCallback(() => {
-    setPhotoUploadOpen(true);
-    setUploadSuccess(false);
-  }, []);
-
-  // Handle closing the photo upload dialog
-  const handleClosePhotoUpload = useCallback(() => {
-    setPhotoUploadOpen(false);
-    
-    // If upload was successful, refresh the photos
-    if (uploadSuccess) {
-      setPhotosInitialized(false);
-      fetchPhotos();
-    }
-  }, [uploadSuccess, fetchPhotos]);
-
-// Handle successful upload
-  const handleUploadSuccess = useCallback(() => {
-    setUploadSuccess(true);
-    setDebug(prev => [...prev, 'Photo upload successful']);
-  
-    // Automatically close the dialog after a short delay
-    setTimeout(() => {
-      setPhotoUploadOpen(false);
-      setPhotosInitialized(false); // Reset photos to trigger a refresh
-      fetchPhotos(); // Refresh photos
-    }, 1500); // 1.5 second delay to show the success message
-  }, [fetchPhotos]);
-
-  // Process friends data when tab changes
-  useEffect(() => {
-    if (tabValue === 2 && profile) {
-      if (!friendsInitialized && !loadingFriends) {
-        fetchFriends();
-      }
-    }
-  }, [
-    tabValue, 
-    profile, 
-    fetchFriends, 
-    loadingFriends, 
-    friendsInitialized
-  ]);
 
   // Process photos data when tab changes
   useEffect(() => {
@@ -870,7 +534,7 @@ const ProfilePage: React.FC = () => {
                 <FollowButton
                   userId={profile._id}
                   initialFollowState={isFollowing}
-                  onFollowChange={(newFollowState, newFollowersCount) => {
+                  onFollowChange={(newFollowState) => {
                     setIsFollowing(newFollowState);
                     // Update profile followers count if needed
                     setProfile(prevProfile => {

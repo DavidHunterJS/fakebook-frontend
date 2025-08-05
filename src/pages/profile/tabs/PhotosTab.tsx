@@ -48,7 +48,12 @@ interface AlbumPhoto {
   likes?: Array<string> | number;
   comments?: Array<string> | number;
 }
-
+interface ApiAlbum {
+  _id: string;
+  title: string;
+  createdAt: string;
+  photos: AlbumPhoto[]; 
+}
 interface ApiError {
   response?: { data?: { message?: string; }; };
   message?: string;
@@ -112,7 +117,7 @@ const PhotosTab: React.FC<PhotosTabProps> = ({ profile, isOwnProfile, userPostsD
       try {
         const albumsResponse = await api.get(`/users/${profile._id}/albums`);
         if (albumsResponse?.data?.albums) {
-          photosFromAlbums = albumsResponse.data.albums.flatMap((album: any) =>
+          photosFromAlbums = albumsResponse.data.albums.flatMap((album: ApiAlbum) =>
             (album.photos || []).map((photo: AlbumPhoto) => ({
               _id: photo._id || `album-${album._id}-${photo.filename}`,
               url: getFullImageUrl(photo.filename, 'post'),
@@ -127,7 +132,8 @@ const PhotosTab: React.FC<PhotosTabProps> = ({ profile, isOwnProfile, userPostsD
           onDebugMessage(`[PhotosTab] Extracted ${photosFromAlbums.length} photos from albums.`);
         }
       } catch (e) {
-        onDebugMessage(`[PhotosTab] Could not fetch albums (this might be expected).`);
+
+        onDebugMessage(`[PhotosTab] Could not fetch albums (this might be expected).${e}`);
       }
 
       const profilePhotos: Photo[] = [];

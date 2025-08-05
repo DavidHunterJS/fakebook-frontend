@@ -34,7 +34,7 @@ interface ProfileFormData {
 }
 
 const EditProfilePage: FC = () => {
-  const { user, token, updateUserInContext, loading: authLoading } = useAuth();
+  const { user, updateUserInContext, loading: authLoading } = useAuth();
 
   const [formData, setFormData] = useState<ProfileFormData>({
     firstName: '', lastName: '', username: '', email: '', bio: '', location: '',

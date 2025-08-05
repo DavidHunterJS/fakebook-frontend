@@ -923,7 +923,7 @@ export default function AIGeneratorPage() {
           const errorData = await response.json();
           errorMessage = errorData.error || errorData.message || errorMessage;
         } catch (parseError) {
-            // Could not parse, use default message
+            console.log(parseError)
         }
         throw new Error(errorMessage);
       }

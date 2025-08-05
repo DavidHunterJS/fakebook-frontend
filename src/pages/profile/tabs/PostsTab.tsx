@@ -57,7 +57,6 @@ const PostsTab: React.FC<PostsTabProps> = ({
   isOwnProfile,
   userPostsData,
   userPostsLoading,
-  onDebugMessage
 }) => {
   const router = useRouter();
 

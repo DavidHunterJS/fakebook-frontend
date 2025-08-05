@@ -1,4 +1,5 @@
 // src/ai-models/types.ts
+import React from 'react';
 
 export interface SelectOption {
   value: string;
@@ -14,10 +15,10 @@ export interface ParameterConfig {
   helperText?: string;
   tooltip?: string;
   options?: SelectOption[];
-  inputProps?: Record<string, any>;
+  inputProps?: React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement>;
   rows?: number;
   required?: boolean;
-  showWhen?: (params: Record<string, any>) => boolean;
+  showWhen?: (params: Record<string, string | number | boolean>) => boolean;
 }
 
 export interface ModelConfig {

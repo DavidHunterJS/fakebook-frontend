@@ -28,15 +28,11 @@ import { HelpOutline } from '@mui/icons-material';
 import { MODEL_CONFIGS, ModelConfig, ParameterConfig } from '../ai-models';
 import { InpaintingCanvas } from '../components/InpaintingCanvas'; // Import the canvas component
 
-// Model configuration types
-interface SelectOption {
-  value: string;
-  label: string;
-}
+
 
 export default function AIGeneratorPage() {
   const [selectedModelId, setSelectedModelId] = useState<string>('stable-diffusion-xl');
-  const [parameters, setParameters] = useState<Record<string, any>>({});
+  const [parameters, setParameters] = useState<Record<string, string | number | boolean>>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [images, setImages] = useState<string[]>([]);
@@ -53,7 +49,7 @@ export default function AIGeneratorPage() {
 
   // Initialize parameters when model changes
   const initializeParameters = (modelConfig: ModelConfig) => {
-    const initialParams: Record<string, any> = {};
+    const initialParams: Record<string, string | number | boolean> = {};
     modelConfig.parameters.forEach(param => {
       if (param.defaultValue !== undefined) {
         initialParams[param.name] = param.defaultValue;
@@ -109,7 +105,7 @@ export default function AIGeneratorPage() {
     }));
   };
 
-  const handleSelectChange = (e: SelectChangeEvent<string>) => {
+  const handleSelectChange = (e: SelectChangeEvent<string | number | boolean>) => {
     const { name, value } = e.target;
     setParameters(prev => ({ ...prev, [name]: value }));
   };
@@ -191,25 +187,25 @@ export default function AIGeneratorPage() {
           />
         );
 
-      case 'select':
-        return (
-          <FormControl key={name} fullWidth>
-            <InputLabel id={`${name}-label`}>{labelWithTooltip}</InputLabel>
-            <Select
-              labelId={`${name}-label`}
-              name={name}
-              value={value}
-              label={label} // Use original label for Select component
-              onChange={handleSelectChange}
-            >
-              {options?.map(option => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        );
+        case 'select':
+          return (
+            <FormControl key={name} fullWidth>
+              <InputLabel id={`${name}-label`}>{labelWithTooltip}</InputLabel>
+              <Select
+                labelId={`${name}-label`}
+                name={name}
+                value={value}
+                label={typeof labelWithTooltip === 'string' ? labelWithTooltip : label} // Use string label for Select
+                onChange={handleSelectChange}
+              >
+                {options?.map(option => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          );
 
       case 'switch':
         return (
@@ -310,7 +306,7 @@ export default function AIGeneratorPage() {
           console.log('Error response:', errorData);
           errorMessage = errorData.error || errorData.message || errorMessage;
         } catch (parseError) {
-          console.log('Could not parse error response');
+          console.log(`Could not parse error response ${parseError}`);
         }
         throw new Error(errorMessage);
       }
