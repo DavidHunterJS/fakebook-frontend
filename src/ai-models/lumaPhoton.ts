@@ -47,7 +47,7 @@ const lumaPhoton: ModelConfig = {
         inputProps: { step: 0.01, min: 0, max: 1 },
         helperText: '0.0 to 1.0 - Higher values make the reference image more influential',
         tooltip: 'Controls how strongly the reference image influences the generation. 0 = no influence, 1 = maximum influence.',
-        showWhen: (params) => params.image_reference && params.image_reference.trim() !== ''
+        showWhen: (params) => Boolean(params.image_reference && typeof params.image_reference === 'string' && params.image_reference.trim() !== '')
       },
       {
         name: 'style_reference',
@@ -65,7 +65,7 @@ const lumaPhoton: ModelConfig = {
         inputProps: { step: 0.01, min: 0, max: 1 },
         helperText: '0.0 to 1.0 - Higher values make the style reference more influential',
         tooltip: 'Controls how strongly the style reference influences the generation. 0 = no influence, 1 = maximum influence.',
-        showWhen: (params) => params.style_reference && params.style_reference.trim() !== ''
+        showWhen: (params) => Boolean(params.style_reference && typeof params.style_reference === 'string' && params.style_reference.trim() !== '')
       },
       {
         name: 'character_reference',
