@@ -1,4 +1,3 @@
-// src/hooks/usePosts.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../utils/api';
 import { Post } from '../types/post';
@@ -85,14 +84,11 @@ export const useLikePost = () => {
   });
 };
 
-// ✅ START: CORRECTED UPDATE POST HOOK
-// This interface now correctly expects the pre-built FormData.
 interface UpdatePostPayload {
   postId: string;
   formData: FormData;
 }
 
-// This function now correctly sends the FormData with the right headers.
 const updatePost = async ({ postId, formData }: UpdatePostPayload) => {
   const { data } = await api.put(`/posts/${postId}`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -100,14 +96,12 @@ const updatePost = async ({ postId, formData }: UpdatePostPayload) => {
   return data;
 };
 
-// The hook itself uses the corrected function.
 export const useUpdatePost = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: updatePost,
     onSuccess: () => {
-      // Invalidate all post-related queries to refetch the latest data
       queryClient.invalidateQueries({ queryKey: ['posts'] });
     },
     onError: (error) => {
@@ -115,7 +109,6 @@ export const useUpdatePost = () => {
     }
   });
 };
-// ✅ END: CORRECTED UPDATE POST HOOK
 
 export const useDeletePost = () => {
   const queryClient = useQueryClient();
@@ -127,6 +120,43 @@ export const useDeletePost = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+  });
+};
+
+// --- ✅ NEW HOOKS ADDED BELOW ---
+
+export const useSavePost = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: (postId: string) => api.post(`/posts/${postId}/save`),
+    onSuccess: () => {
+      // Invalidate all post queries to refetch and update the 'isSaved' status
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+  });
+};
+
+export const useUnsavePost = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: (postId: string) => api.delete(`/posts/${postId}/save`),
+    onSuccess: () => {
+      // Invalidate all post queries to refetch and update the 'isSaved' status
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+  });
+};
+
+export const useGetSavedPosts = () => {
+  return useQuery<Post[]>({
+    queryKey: ['posts', 'saved'],
+    queryFn: async () => {
+      const response = await api.get('/posts/saved');
+      // The backend returns a paginated structure like { posts: [...] }
+      return response.data.posts || [];
     },
   });
 };

@@ -32,7 +32,7 @@ function MyApp({ Component, pageProps }: AppProps) {
     '/verify-email',
     '/friends',
     '/settings/profile',
-    '/genimage'
+    '/aitoolbox'
   ];
 
   // Check if current path starts with /profile/ to match dynamic routes

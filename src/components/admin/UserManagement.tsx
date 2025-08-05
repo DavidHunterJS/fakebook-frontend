@@ -19,7 +19,7 @@ import {
   DialogTitle,
   CircularProgress,
   Alert,
-  Pagination, // ✅ Import the Pagination component
+  Pagination,
 } from '@mui/material';
 import { User } from '../../types/user';
 import { Role } from '../../config/roles';
@@ -32,23 +32,19 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ State for pagination
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
 
-  // State for the confirmation dialog
   const [open, setOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
-  // ✅ Fetch users whenever the 'page' state changes
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
-        // Pass the current page to the API call
         const response = await getAllUsers(page);
         setUsers(response.users);
-        setTotalPages(response.pagination.pages); // Set total pages from the API response
+        setTotalPages(response.pagination.pages);
       } catch (err) {
         setError('Failed to fetch users.');
         console.log(err);
@@ -57,26 +53,22 @@ const UserManagement = () => {
       }
     };
     fetchUsers();
-  }, [page]); // Dependency array now includes 'page'
+  }, [page]);
 
-  // Function to open the confirmation dialog
   const handleDeleteClick = (userId: string) => {
     setUserToDelete(userId);
     setOpen(true);
   };
 
-  // Function to close the dialog
   const handleClose = () => {
     setOpen(false);
     setUserToDelete(null);
   };
 
-  // Function to confirm and execute the deletion
   const handleConfirmDelete = async () => {
     if (userToDelete) {
       try {
         await deleteUserById(userToDelete);
-        // After deleting, refetch the current page to get the updated list
         const response = await getAllUsers(page);
         setUsers(response.users);
         setTotalPages(response.pagination.pages);
@@ -110,11 +102,9 @@ const UserManagement = () => {
     }
   };
   
-  // ✅ Handler for changing the page
   const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
     setPage(value);
   };
-
 
   if (loading) {
     return (
@@ -155,18 +145,19 @@ const UserManagement = () => {
           <TableBody>
             {users.map((user) => (
               <TableRow key={user._id}>
-              <TableCell>
-                <Link href={`/admin/users/${user._id}`} passHref>
+                <TableCell>
+                  {/* --- THIS IS THE CORRECTED CODE --- */}
+                  {/* The Button now acts as the link itself, preventing nested <a> tags */}
                   <Button 
-                    component="a"
+                    component={Link}
+                    href={`/admin/users/${user._id}`}
                     variant="contained"
                     color="primary"
                     size="small"
                   >
                     {user.username}
                   </Button>
-                </Link>
-              </TableCell>
+                </TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>{`${user.firstName} ${user.lastName}`}</TableCell>
                 <TableCell>{user.role}</TableCell>
@@ -202,7 +193,6 @@ const UserManagement = () => {
         </Table>
       </TableContainer>
 
-      {/* ✅ Add the Pagination component at the bottom */}
       <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
         <Pagination
           count={totalPages}
@@ -212,7 +202,6 @@ const UserManagement = () => {
         />
       </Box>
 
-      {/* Confirmation Dialog */}
       <Dialog open={open} onClose={handleClose}>
         <DialogTitle>Confirm Deletion</DialogTitle>
         <DialogContent>
