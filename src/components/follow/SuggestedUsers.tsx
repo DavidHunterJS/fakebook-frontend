@@ -11,8 +11,6 @@ import {
   Alert,
   Grid,
   Chip,
-  useTheme,
-  useMediaQuery,
   Tooltip
 } from '@mui/material';
 import {
@@ -52,8 +50,6 @@ const SuggestedUsers: React.FC<SuggestedUsersProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const fetchSuggestedUsers = async () => {
     setLoading(true);

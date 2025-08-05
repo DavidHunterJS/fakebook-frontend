@@ -399,26 +399,28 @@ export const InpaintingCanvas: React.FC<InpaintingCanvasProps> = ({
           {/* UI mask canvas (red overlay) */}
           <canvas
             ref={uiMaskCanvasRef}
+            // Mouse events are passed directly as they match the expected type
             onMouseDown={startDrawing}
             onMouseMove={draw}
             onMouseUp={stopDrawing}
             onMouseLeave={stopDrawing}
-            onTouchStart={(e) => {
-              const touch = e.touches[0];
-              const mouseEvent = new MouseEvent('mousedown', {
+            // Touch events are adapted before being passed to the drawing functions
+            onTouchStart={(event: React.TouchEvent<HTMLCanvasElement>) => {
+              // Create a simplified object from the touch event and cast it.
+              // This is safe because our drawing functions only use clientX/clientY.
+              const touch = event.touches[0];
+              startDrawing({
                 clientX: touch.clientX,
-                clientY: touch.clientY
-              });
-              startDrawing(mouseEvent as any);
+                clientY: touch.clientY,
+              } as React.MouseEvent<HTMLCanvasElement>);
             }}
-            onTouchMove={(e) => {
-              e.preventDefault();
-              const touch = e.touches[0];
-              const mouseEvent = new MouseEvent('mousemove', {
+            onTouchMove={(event: React.TouchEvent<HTMLCanvasElement>) => {
+              event.preventDefault(); // Prevent scrolling
+              const touch = event.touches[0];
+              draw({
                 clientX: touch.clientX,
-                clientY: touch.clientY
-              });
-              draw(mouseEvent as any);
+                clientY: touch.clientY,
+              } as React.MouseEvent<HTMLCanvasElement>);
             }}
             onTouchEnd={stopDrawing}
             style={{
@@ -433,7 +435,6 @@ export const InpaintingCanvas: React.FC<InpaintingCanvasProps> = ({
               touchAction: 'none', // Prevent scrolling on touch
             }}
           />
-          
           {/* Stable Diffusion mask canvas (black and white) */}
           <canvas
             ref={sdMaskCanvasRef}
@@ -527,7 +528,7 @@ export const InpaintingCanvas: React.FC<InpaintingCanvasProps> = ({
             <strong>Instructions (FLUX Dev Inpainting):</strong>
             <br />1. Upload a base image.
             <br />2. Use the red brush to mark areas you want to change.
-            <br />3. Toggle "SD Mask" to see the black/white mask sent to FLUX.
+            <br />3. Toggle &quot;SD Mask&quot; to see the black/white mask sent to FLUX.
             <br />4. White areas = inpaint, Black areas = preserve.
             <br />5. Recommended: 28-50 inference steps, guidance 30.
             <br />6. Use a descriptive prompt for the masked area.

@@ -11,13 +11,14 @@ import {
 import { Edit as EditIcon } from '@mui/icons-material';
 import { User } from '../../../types/user'; // Adjust path as needed
 import api from '../../../utils/api'; // Adjust path as needed
+import { Post } from '@/types/post';
 
 // Interface for profile data - extends User type
 interface Profile extends User {
   bio?: string;
   followers?: string[];
   following?: string[];
-  recentPosts?: any[]; // You might want to import Post type if needed
+  recentPosts?: Post[]; // You might want to import Post type if needed
   relationshipStatus?: {
     isOwnProfile?: boolean;
     isFriend?: boolean;

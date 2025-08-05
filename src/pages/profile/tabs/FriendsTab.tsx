@@ -28,6 +28,11 @@ interface User {
   profilePicture?: string;
   following?: string[];
 }
+type PotentialFriend = {
+  user?: FriendUser;
+  profile?: FriendUser;
+  friend?: FriendUser;
+} & Partial<FriendUser>;
 
 interface FriendUser extends User {
   isFollowing?: boolean;
@@ -86,7 +91,7 @@ const FriendsTab: React.FC<FriendsTabProps> = ({ profile, isOwnProfile }) => {
       const potentialFriends = response?.data?.friends || (Array.isArray(response.data) ? response.data : []);
 
       // Ensure we unwrap the friend object if it's nested (e.g., { user: {...} })
-      friendsData = potentialFriends.map((f: any) => f.user || f.profile || f.friend || f);
+      friendsData = potentialFriends.map((f: PotentialFriend) => f.user || f.profile || f.friend || f);
 
       // Add following status
       if (currentUser && friendsData.length > 0) {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography, Link, SxProps, Theme } from '@mui/material';
+import { Box, Typography, SxProps, Theme } from '@mui/material';
 
 // Define the props interface for the component
 interface ProfileStatsProps {

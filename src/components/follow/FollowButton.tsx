@@ -10,7 +10,6 @@ import {
 import {
   PersonAdd as PersonAddIcon,
   PersonRemove as PersonRemoveIcon,
-  Person as PersonIcon
 } from '@mui/icons-material';
 import api from '../../utils/api'; // Import your API utility
 import { AxiosError } from 'axios';
