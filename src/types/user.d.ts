@@ -8,6 +8,7 @@ export interface User {
   profileImage?: string;
   profilePicture?: string;
   coverPhoto?: string;
+  coverPhotoUrl?: string;
   bio?: string;
   followers?: string[];
   following?: string[];

@@ -1,12 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
-import ImageList from '@mui/material/ImageList';
-import ImageListItem from '@mui/material/ImageListItem';
-import ImageListItemBar from '@mui/material/ImageListItemBar';
 import { useMediaQuery, useTheme } from '@mui/material';
 import { useGetUserPosts } from '../../hooks/usePosts'; // Ensure this path is correct
-import PostForm from '../../components/post/PostForm';
 import {
   Container,
   Box,
@@ -39,8 +35,17 @@ import useAuth from '../../hooks/useAuth'; // Adjust path if needed
 import api from '../../utils/api'; // Adjust path if needed
 import { User } from '../../types/user'; // Adjust path if needed
 import { Post, MediaItem } from '../../types/post'; // Adjust path if needed
-import PostCard from '../../components/post/PostCard'; // Adjust path if needed
 import {getFullImageUrl}  from '../../utils/imgUrl'; // Adjust the path as needed
+
+// NEW FOLLOW SYSTEM IMPORTS
+import FollowButton from '../../components/follow/FollowButton';
+import ProfileStats from '../../components//follow/ProfileStats';
+import SuggestedUsers from '../../components/follow/SuggestedUsers';
+import FollowersList from '../../components/follow/FollowersList';
+import AboutTab from  './tabs/AboutTab';
+import PostsTab from './tabs/PostsTab';
+import FriendsTab from './tabs/FriendsTab';
+import PhotosTab from './tabs/PhotosTab'
 
 // Define a type for API errors
 interface ApiError {
@@ -100,6 +105,9 @@ interface Profile extends User {
   phone?: string;
   // Friends data
   friends?: FriendUser[];
+  // Follow system counts
+  followersCount?: number;
+  followingCount?: number;
 }
 
 interface Photo {
@@ -122,18 +130,9 @@ interface AlbumPhoto {
   likes?: Array<string> | number;
   comments?: Array<string> | number;
 }
-
-// Add PostFormProps interface for extended PostForm
-// interface PostFormProps {
-//   initialMode?: 'text' | 'photo';
-//   disableTextOnly?: boolean;
-//   onSubmitSuccess?: () => void;
-//   customSubmitButtonText?: string;
-//   dialogMode?: boolean;
-// }
-
 const ProfilePage: React.FC = () => {
   // Hooks must be called inside the component and at the top level
+  const [listOpen, setListOpen] = useState<'followers' | 'following' | null>(null);
   const router = useRouter();
   const { id } = router.query; // 'id' is now correctly scoped
   const { user: currentUser, isAuthenticated } = useAuth();
@@ -146,7 +145,6 @@ const ProfilePage: React.FC = () => {
     data: userPostsData = [], // Renamed to avoid conflict
     isLoading: userPostsLoading, // Renamed to avoid conflict
   } = useGetUserPosts(typeof id === 'string' ? id : undefined);
-
 
   // State variables - grouped by functionality
   // Profile and loading states
@@ -166,11 +164,6 @@ const ProfilePage: React.FC = () => {
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [friendsError, setFriendsError] = useState<string | null>(null);
   const [friendsInitialized, setFriendsInitialized] = useState(false);
-
-  // Suggestions data
-  const [suggestions, setSuggestions] = useState<SuggestedFriend[]>([]);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
 
   // Photos data
   const [photosData, setPhotosData] = useState<Photo[]>([]);
@@ -235,33 +228,6 @@ const ProfilePage: React.FC = () => {
     }
   }, []); // setDebug is stable, so often omitted. Add if linting requires.
 
-  // Fetch suggestions function
-  const fetchSuggestions = useCallback(async () => {
-    if (!isAuthenticated || !currentUser) return;
-    
-    setLoadingSuggestions(true);
-    setSuggestionsError(null);
-    
-    try {
-      setDebug(prev => [...prev, `Fetching friend suggestions`]);
-      const response = await makeApiRequest('/friends/suggestions?limit=20', 'get');
-      
-      if (response?.data && response.data.suggestions) {
-        setDebug(prev => [...prev, `Found ${response.data.suggestions.length} friend suggestions`]);
-        setSuggestions(response.data.suggestions);
-      } else {
-        setSuggestions([]);
-      }
-    } catch (error: unknown) {
-      const err = error as ApiError;
-      console.error('Error fetching friend suggestions:', err);
-      setSuggestionsError(err.response?.data?.message || err.message || 'Failed to load friend suggestions.');
-      setDebug(prev => [...prev, `Error fetching friend suggestions: ${err.message}`]);
-    } finally {
-      setLoadingSuggestions(false);
-    }
-  }, [isAuthenticated, currentUser, makeApiRequest]);
-
   // Handle sending a friend request
   const handleSendFriendRequest = useCallback(async (userId: string) => {
     if (!isAuthenticated || !currentUser) return;
@@ -269,15 +235,6 @@ const ProfilePage: React.FC = () => {
     try {
       await makeApiRequest(`/friends/request/${userId}`, 'post');
       setDebug(prev => [...prev, `Friend request sent to user ${userId}`]);
-      
-      // Update the suggestions list to show the request has been sent
-      setSuggestions(prevSuggestions => 
-        prevSuggestions.map(suggestion => 
-          suggestion._id === userId 
-            ? { ...suggestion, isRequested: true } 
-            : suggestion
-        )
-      );
     } catch (error: unknown) {
       const err = error as ApiError;
       console.error('Error sending friend request:', err);
@@ -411,9 +368,6 @@ const ProfilePage: React.FC = () => {
   }, [id, profile, makeApiRequest, currentUser, friendsInitialized, friends.length]);
 
   // Fetch photos function
-  // Inside your ProfilePage component...
-
-  // Fetch photos function
   const fetchPhotos = useCallback(async () => {
     if (!profile || typeof id !== 'string') return;
     if (photosInitialized && photosData.length > 0) {
@@ -538,8 +492,6 @@ const ProfilePage: React.FC = () => {
     }
   }, [id, profile, posts, userPostsData, makeApiRequest, photosInitialized, photosData.length]);
 
-
-
   // Get grid columns function
   const getGridCols = useCallback(() => {
     if (isSmallScreen) return 2;
@@ -559,68 +511,6 @@ const ProfilePage: React.FC = () => {
       window.open(photo.url, '_blank');
     }
   }, [router]);
-
-  // Handle following a friend
-  const handleFollowFriend = useCallback(async (friendId: string) => {
-    if (!isAuthenticated || !currentUser) return;
-    try {
-      await makeApiRequest(`/users/${friendId}/follow`, 'post');
-      setDebug(prev => [...prev, `Successfully followed user ${friendId}`]);
-      
-      // Update friends list if the user is in it
-      setFriends(prevFriends =>
-        prevFriends.map(friend =>
-          friend._id === friendId
-            ? { ...friend, isFollowing: true }
-            : friend
-        )
-      );
-      
-      // Also update suggestions list if the user is in it
-      setSuggestions(prevSuggestions =>
-        prevSuggestions.map(suggestion =>
-          suggestion._id === friendId
-            ? { ...suggestion, isFollowing: true }
-            : suggestion
-        )
-      );
-    } catch (error: unknown) {
-      const err = error as ApiError;
-      console.error('Error following friend:', err);
-      setDebug(prev => [...prev, `Error following friend ${friendId}: ${err.message}`]);
-    }
-  }, [isAuthenticated, currentUser, makeApiRequest]);
-
-  // Handle unfollowing a friend
-  const handleUnfollowFriend = useCallback(async (friendId: string) => {
-    if (!isAuthenticated || !currentUser) return;
-    try {
-      await makeApiRequest(`/users/${friendId}/unfollow`, 'post');
-      setDebug(prev => [...prev, `Successfully unfollowed user ${friendId}`]);
-      
-      // Update friends list if the user is in it
-      setFriends(prevFriends =>
-        prevFriends.map(friend =>
-          friend._id === friendId
-            ? { ...friend, isFollowing: false }
-            : friend
-        )
-      );
-      
-      // Also update suggestions list if the user is in it
-      setSuggestions(prevSuggestions =>
-        prevSuggestions.map(suggestion =>
-          suggestion._id === friendId
-            ? { ...suggestion, isFollowing: false }
-            : suggestion
-        )
-      );
-    } catch (error: unknown) {
-      const err = error as ApiError;
-      console.error('Error unfollowing friend:', err);
-      setDebug(prev => [...prev, `Error unfollowing friend ${friendId}: ${err.message}`]);
-    }
-  }, [isAuthenticated, currentUser, makeApiRequest]);
 
   // Handle bio save
   const handleSaveBio = useCallback(async () => {
@@ -728,35 +618,6 @@ const ProfilePage: React.FC = () => {
     setTabValue(newValue);
   }, []);
 
-  // Handle follow toggle
-  const handleFollowToggle = useCallback(async () => {
-    if (!isAuthenticated || typeof id !== 'string' || !profile || !currentUser) return;
-    const isCurrentlyFollowing = isFollowing;
-    const endpoint = isCurrentlyFollowing ? `/users/${id}/unfollow` : `/users/${id}/follow`;
-    try {
-      await makeApiRequest(endpoint, 'post');
-      setIsFollowing(!isCurrentlyFollowing);
-      setProfile(prevProfile => {
-        if (!prevProfile) return null;
-        const currentFollowers = prevProfile.followers || [];
-        let updatedFollowers: string[];
-        if (isCurrentlyFollowing) {
-            updatedFollowers = currentFollowers.filter((followerId: string) => String(followerId) !== currentUser._id);
-        } else {
-            updatedFollowers = [...new Set([...currentFollowers, currentUser._id])];
-        }
-        const updatedRelationshipStatus = prevProfile.relationshipStatus
-          ? { ...prevProfile.relationshipStatus, isFollowing: !isCurrentlyFollowing }
-          : { isFollowing: !isCurrentlyFollowing }; // Initialize if undefined
-        return { ...prevProfile, followers: updatedFollowers, relationshipStatus: updatedRelationshipStatus };
-      });
-    } catch (followErr: unknown) {
-      const err = followErr as ApiError;
-      console.error('Error toggling follow:', err);
-      setError(err.response?.data?.message || err.message || 'Follow action failed.');
-    }
-  }, [isAuthenticated, id, profile, currentUser, isFollowing, makeApiRequest]);
-
   // Handle opening the photo upload dialog
   const handleOpenPhotoUpload = useCallback(() => {
     setPhotoUploadOpen(true);
@@ -787,16 +648,11 @@ const ProfilePage: React.FC = () => {
     }, 1500); // 1.5 second delay to show the success message
   }, [fetchPhotos]);
 
-  // Process friends and suggestions data when tab changes
+  // Process friends data when tab changes
   useEffect(() => {
     if (tabValue === 2 && profile) {
       if (!friendsInitialized && !loadingFriends) {
         fetchFriends();
-      }
-      
-      // Fetch suggestions only for own profile
-      if (isOwnProfile && currentUser && suggestions.length === 0 && !loadingSuggestions) {
-        fetchSuggestions();
       }
     }
   }, [
@@ -804,12 +660,7 @@ const ProfilePage: React.FC = () => {
     profile, 
     fetchFriends, 
     loadingFriends, 
-    friendsInitialized, 
-    isOwnProfile, 
-    currentUser, 
-    suggestions.length, 
-    loadingSuggestions, 
-    fetchSuggestions
+    friendsInitialized
   ]);
 
   // Process photos data when tab changes
@@ -957,7 +808,16 @@ const ProfilePage: React.FC = () => {
                 <Typography variant="h5">{profile.firstName} {profile.lastName}</Typography>
                 <Typography variant="body1" color="text.secondary" gutterBottom>@{profile.username}</Typography>
                 <Typography variant="body1" sx={{mt: 2}}>This profile is private.</Typography>
-                {isAuthenticated && !isOwnProfile && ( <Button variant={isFollowing ? "outlined" : "contained"} startIcon={<PersonAddIcon />} onClick={handleFollowToggle} sx={{ mt: 2 }}> {isFollowing ? 'Unfollow' : 'Follow'} </Button> )}
+                {isAuthenticated && !isOwnProfile && (
+                  <FollowButton
+                    userId={profile._id}
+                    initialFollowState={isFollowing}
+                    onFollowChange={(newState) => setIsFollowing(newState)}
+                    size="medium"
+                    variant="contained"
+                    className="mt-2"
+                  />
+                )}
              </Paper>
         </Container>
      );
@@ -989,13 +849,58 @@ const ProfilePage: React.FC = () => {
             <Typography variant="h4" component="h1" gutterBottom> {profile.firstName} {profile.lastName} </Typography>
             <Typography variant="body1" color="text.secondary" gutterBottom> @{profile.username} </Typography>
             {profile.bio && <Typography variant="body1" sx={{ mt: 1 }}>{profile.bio}</Typography>}
-            <Box sx={{ display: 'flex', mt: 1, justifyContent: { xs: 'center', md: 'flex-start' } }}>
-              <Typography variant="body2" sx={{ mr: 3 }}> <strong>{profile.followers?.length ?? 0}</strong> followers </Typography>
-              <Typography variant="body2"> <strong>{profile.following?.length ?? 0}</strong> following </Typography>
-            </Box>
+            
+            {/* REPLACED: Old follower count display with new ProfileStats component */}
+            <ProfileStats
+              followersCount={profile.followersCount || profile.followers?.length || 0}
+              followingCount={profile.followingCount || profile.following?.length || 0}
+              onFollowersClick={() => setListOpen('followers')}
+              onFollowingClick={() => setListOpen('following')}
+            />
           </Box>
+          
+          {/* REPLACED: Old follow button with new FollowButton component */}
           <Box sx={{ mt: { xs: 2, md: 0 }, display: 'flex', alignItems: 'center' }}>
-            {isAuthenticated && ( isOwnProfile ? ( <Button variant="contained" startIcon={<EditIcon />} onClick={() => router.push('/settings/profile')}> Edit Profile </Button> ) : ( <Button variant={isFollowing ? "outlined" : "contained"} startIcon={<PersonAddIcon />} onClick={handleFollowToggle}> {isFollowing ? 'Unfollow' : 'Follow'} </Button> ) )}
+            {isAuthenticated && ( 
+              isOwnProfile ? ( 
+                <Button variant="contained" startIcon={<EditIcon />} onClick={() => router.push('/settings/profile')}> 
+                  Edit Profile 
+                </Button> 
+              ) : ( 
+                <FollowButton
+                  userId={profile._id}
+                  initialFollowState={isFollowing}
+                  onFollowChange={(newFollowState, newFollowersCount) => {
+                    setIsFollowing(newFollowState);
+                    // Update profile followers count if needed
+                    setProfile(prevProfile => {
+                      if (!prevProfile) return null;
+                      const currentFollowers = prevProfile.followers || [];
+                      let updatedFollowers: string[];
+                      if (newFollowState) {
+                        updatedFollowers = [...new Set([...currentFollowers, currentUser?._id || ''])];
+                      } else {
+                        updatedFollowers = currentFollowers.filter((followerId: string) => 
+                          String(followerId) !== currentUser?._id
+                        );
+                      }
+                      return { 
+                        ...prevProfile, 
+                        followers: updatedFollowers,
+                        followersCount: updatedFollowers.length,
+                        relationshipStatus: { 
+                          ...prevProfile.relationshipStatus, 
+                          isFollowing: newFollowState 
+                        }
+                      };
+                    });
+                  }}
+                  size="medium"
+                  variant="contained"
+                  className=""
+                />
+              ) 
+            )}
           </Box>
         </Box>
       </Paper>
@@ -1010,502 +915,72 @@ const ProfilePage: React.FC = () => {
 
       {/* Posts Tab - Using data from useGetUserPosts */}
       <Box sx={{ display: tabValue === 0 ? 'block' : 'none' }}>
-        {userPostsLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
-        ) : userPostsData.length > 0 ? (
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
-            <Box sx={{ width: { xs: '100%', md: '33.33%' }, order: { xs: 2, md: 1 } }}>
-              <Paper sx={{ p: 3, borderRadius: 2, position: 'sticky', top: 80 }}>
-                <Typography variant="h6" gutterBottom>Intro</Typography>
-                {profile.bio ? ( <Typography variant="body2">{profile.bio}</Typography> ) : ( <Typography variant="body2" color="text.secondary">No bio available</Typography> )}
-                {/* You could display profile.recentPosts (now in 'posts' state) here if different from userPostsData */}
-                {isOwnProfile && ( <Button fullWidth variant="outlined" sx={{ mt: 2 }} onClick={() => router.push('/settings/profile')}> Edit Details </Button> )}
-              </Paper>
-            </Box>
-            <Box sx={{ width: { xs: '100%', md: '66.67%' }, order: { xs: 1, md: 2 } }}>
-              {userPostsData.map((post) => ( <PostCard key={post._id} post={post} /> ))}
-            </Box>
-          </Box>
-        ) : (
-          <Paper sx={{ p: 4, borderRadius: 2, textAlign: 'center' }}> <Typography variant="body1" color="text.secondary">No posts to display.</Typography> </Paper>
-        )}
+        <PostsTab
+          profile={profile}
+          isOwnProfile={isOwnProfile || false}
+          userPostsData={userPostsData}
+          userPostsLoading={userPostsLoading}
+          onDebugMessage={(message) => {
+            setDebug(prev => [...prev, message]);
+          }}
+        />
       </Box>
 
       {/* About Tab */}
       <Box sx={{ display: tabValue === 1 ? 'block' : 'none' }}>
-        <Paper sx={{ p: 4, borderRadius: 2 }}>
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
-            <Box sx={{ width: { xs: '100%', md: '30%' } }}>
-              <Typography variant="h6" gutterBottom sx={{ borderBottom: 1, borderColor: 'divider', pb: 1 }}>About</Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
-                {/* Navigation buttons for About sections */}
-                <Button variant="text" sx={{ justifyContent: 'flex-start', px: 2, py: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' }, bgcolor: 'action.selected' }}>Overview</Button>
-                <Button variant="text" sx={{ justifyContent: 'flex-start', px: 2, py: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}>Work and Education</Button>
-                <Button variant="text" sx={{ justifyContent: 'flex-start', px: 2, py: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}>Contact and Basic Info</Button>
-                <Button variant="text" sx={{ justifyContent: 'flex-start', px: 2, py: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}>Details About {profile.firstName}</Button>
-              </Box>
-            </Box>
-            <Box sx={{ width: { xs: '100%', md: '70%' } }}>
-              {/* Bio Section */}
-              <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">Bio</Typography>
-                  {isOwnProfile && !isEditingBio && (<Button variant="outlined" size="small" startIcon={<EditIcon />} onClick={() => setIsEditingBio(true)}>Edit</Button>)}
-                </Box>
-                {isEditingBio ? (
-                  <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveBio(); }}>
-                    <TextField fullWidth multiline rows={4} value={bioValue} onChange={(e) => setBioValue(e.target.value)} placeholder="Tell people about yourself..." variant="outlined" error={!!bioError} helperText={bioError} sx={{ mb: 2 }}/>
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                      <Button variant="text" onClick={handleCancelEditBio} disabled={savingBio}>Cancel</Button>
-                      <Button variant="contained" type="submit" disabled={savingBio} startIcon={savingBio ? <CircularProgress size={16} /> : null}>Save</Button>
-                    </Box>
-                  </Box>
-                ) : (
-                  profile.bio ? <Typography variant="body1">{profile.bio}</Typography> : <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>{isOwnProfile ? 'Add a bio...' : 'No bio available'}</Typography>
-                )}
-              </Paper>
-              {/* Basic Info Section */}
-              <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">Basic Information</Typography>
-                  {isOwnProfile && !isEditingBasicInfo && (<Button variant="outlined" size="small" startIcon={<EditIcon />} onClick={() => setIsEditingBasicInfo(true)}>Edit</Button>)}
-                </Box>
-                {isEditingBasicInfo ? (
-                    <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveBasicInfo(); }}>
-                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 2 }}>
-                            <TextField label="First Name" value={basicInfoValues.firstName} onChange={(e) => setBasicInfoValues(prev => ({ ...prev, firstName: e.target.value }))} fullWidth variant="outlined" required/>
-                            <TextField label="Last Name" value={basicInfoValues.lastName} onChange={(e) => setBasicInfoValues(prev => ({ ...prev, lastName: e.target.value }))} fullWidth variant="outlined" required/>
-                        </Box>
-                        <TextField label="Location" value={basicInfoValues.location} onChange={(e) => setBasicInfoValues(prev => ({ ...prev, location: e.target.value }))} fullWidth variant="outlined" placeholder="Where do you live?" sx={{ mb: 2 }}/>
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                            <Typography variant="subtitle2" sx={{ mr: 1 }}>Username:</Typography>
-                            <Typography variant="body1">@{profile.username}</Typography>
-                            <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>(cannot be changed)</Typography>
-                        </Box>
-                        {basicInfoError && (<Alert severity="error" sx={{ mb: 2 }}>{basicInfoError}</Alert>)}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                            <Button variant="text" onClick={handleCancelEditBasicInfo} disabled={savingBasicInfo}>Cancel</Button>
-                            <Button variant="contained" type="submit" disabled={savingBasicInfo} startIcon={savingBasicInfo ? <CircularProgress size={16} /> : null}>Save</Button>
-                        </Box>
-                    </Box>
-                ) : (
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'auto 1fr' }, gap: '12px', alignItems: 'start' }}>
-                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Name:</Typography>
-                        <Typography variant="body1">{profile.firstName} {profile.lastName}</Typography>
-                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Username:</Typography>
-                        <Typography variant="body1">@{profile.username}</Typography>
-                        <Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Location:</Typography>
-                        <Typography variant="body1">{profile.location || (isOwnProfile ? 'Add your location' : 'No location provided')}</Typography>
-                        {profile.birthday && (<><Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Birthday:</Typography><Typography variant="body1">{new Date(profile.birthday).toLocaleDateString()}</Typography></>)}
-                        {profile.joinedDate && (<><Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Joined:</Typography><Typography variant="body1">{new Date(profile.createdAt || profile.joinedDate).toLocaleDateString()}</Typography></>)}
-                    </Box>
-                )}
-              </Paper>
-              {/* Work and Education Section */}
-              <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
-                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">Work and Education</Typography>
-                    {isOwnProfile && !isEditingWorkEdu && (<Button variant="outlined" size="small" startIcon={<EditIcon />} onClick={() => setIsEditingWorkEdu(true)}>{!profile.work && !profile.education ? 'Add' : 'Edit'}</Button>)}
-                </Box>
-                {isEditingWorkEdu ? (
-                    <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSaveWorkEdu(); }}>
-                        <TextField label="Work" value={workEduValues.work} onChange={(e) => setWorkEduValues(prev => ({ ...prev, work: e.target.value }))} fullWidth variant="outlined" placeholder="Where do you work?" sx={{ mb: 2 }}/>
-                        <TextField label="Education" value={workEduValues.education} onChange={(e) => setWorkEduValues(prev => ({ ...prev, education: e.target.value }))} fullWidth variant="outlined" placeholder="Where did you study?" sx={{ mb: 2 }}/>
-                        {workEduError && (<Alert severity="error" sx={{ mb: 2 }}>{workEduError}</Alert>)}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                            <Button variant="text" onClick={handleCancelEditWorkEdu} disabled={savingWorkEdu}>Cancel</Button>
-                            <Button variant="contained" type="submit" disabled={savingWorkEdu} startIcon={savingWorkEdu ? <CircularProgress size={16} /> : null}>Save</Button>
-                        </Box>
-                    </Box>
-                ) : (
-                    !profile.education && !profile.work ? (
-                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>{isOwnProfile ? 'Add your work and education...' : 'No work or education info'}</Typography>
-                    ) : (
-                        <>{profile.work && (<Box sx={{ mb: 2 }}><Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>Work</Typography><Typography variant="body1">{profile.work}</Typography></Box>)}{profile.education && (<Box><Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>Education</Typography><Typography variant="body1">{profile.education}</Typography></Box>)}</>
-                    )
-                )}
-              </Paper>
-              {/* Contact Info Section */}
-              <Paper variant="outlined" sx={{ p: 3 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">Contact Information</Typography>
-                    {isOwnProfile && (<Button variant="outlined" size="small" startIcon={<EditIcon />}>Edit</Button>)}
-                </Box>
-                {!profile.email && !profile.website && !profile.phone ? (
-                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>{isOwnProfile ? 'Add contact info...' : 'No contact info'}</Typography>
-                ) : (
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'auto 1fr' }, gap: '12px', alignItems: 'start' }}>
-                        {profile.email && (<><Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Email:</Typography><Typography variant="body1">{profile.email}</Typography></>)}
-                        {profile.phone && (<><Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Phone:</Typography><Typography variant="body1">{profile.phone}</Typography></>)}
-                        {profile.website && (<><Typography variant="subtitle2" sx={{ color: 'text.secondary', minWidth: '120px' }}>Website:</Typography><Typography variant="body1" component="a" href={profile.website} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>{profile.website}</Typography></>)}
-                    </Box>
-                )}
-              </Paper>
-            </Box>
-          </Box>
-        </Paper>
+        <AboutTab
+          profile={profile}
+          isOwnProfile={isOwnProfile || false}
+          onProfileUpdate={(updatedFields) => {
+            setProfile(prevProfile => {
+              if (!prevProfile) return null;
+              return { ...prevProfile, ...updatedFields };
+            });
+          }}
+          onDebugMessage={(message) => {
+            setDebug(prev => [...prev, message]);
+          }}
+        />
       </Box>
-
       {/* Friends Tab */}
       <Box sx={{ display: tabValue === 2 ? 'block' : 'none' }}>
-        {/* Current Friends Section */}
-        <Paper sx={{ p: 4, borderRadius: 2, mb: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h5">Friends</Typography>
-            {/* {isOwnProfile && (<Button variant="outlined" startIcon={<PersonAddIcon />} onClick={() => router.push('/friends/find')}>Find More Friends</Button>)} */}
-          </Box>
-          {friendsError && (<Alert severity="error" sx={{ mb: 3 }}>{friendsError}</Alert>)}
-          {loadingFriends ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
-          ) : friendsInitialized && friends.length > 0 ? (
-            <Grid container spacing={2}>
-              {friends.map((friend) => (
-                <Grid size={{xs:12,sm:6,md:4,lg:3}} key={friend._id}>
-                  <Paper 
-                    variant="outlined" 
-                    sx={{ 
-                      p: 2, 
-                      display: 'flex', 
-                      flexDirection: 'column', 
-                      alignItems: 'center',
-                      height: '100%', 
-                      transition: 'transform 0.2s, box-shadow 0.2s',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: 3
-                      }
-                    }}
-                  >
-                    <Avatar 
-                      src={getFullImageUrl(friend.profilePicture, 'profile')} 
-                      alt={friend.username}
-                      sx={{ width: 80, height: 80, mb: 1 }}
-                      onClick={() => router.push(`/profile/${friend._id}`)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    <Typography 
-                      variant="subtitle1" 
-                      sx={{ 
-                        fontWeight: 'bold', 
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        '&:hover': { textDecoration: 'underline' }
-                      }}
-                      onClick={() => router.push(`/profile/${friend._id}`)}
-                    >
-                      {friend.firstName} {friend.lastName}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: 'center' }}>
-                      @{friend.username}
-                    </Typography>
-                    
-                    {isAuthenticated && currentUser?._id !== friend._id && (
-                      <Button 
-                        variant={friend.isFollowing ? "outlined" : "contained"} 
-                        size="small" 
-                        startIcon={<PersonAddIcon />}
-                        fullWidth
-                        onClick={() => friend.isFollowing ? handleUnfollowFriend(friend._id) : handleFollowFriend(friend._id)}
-                      >
-                        {friend.isFollowing ? 'Unfollow' : 'Follow'}
-                      </Button>
-                    )}
-                  </Paper>
-                </Grid>
-              ))}
-            </Grid>
-          ) : friendsInitialized ? (
-            <Box sx={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              py: 6, 
-              textAlign: 'center',
-              bgcolor: 'background.default',
-              borderRadius: 1
-            }}>
-              <PersonIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary">
-                {isOwnProfile ? 'You have no friends yet' : `${profile.firstName} has no friends yet`}
-              </Typography>
-              {isOwnProfile && (
-                <Button 
-                  variant="contained" 
-                  startIcon={<PersonAddIcon />} 
-                  sx={{ mt: 2 }}
-                  onClick={() => router.push('/friends/find')}
-                >
-                  Find Friends
-                </Button>
-              )}
-            </Box>
-          ) : (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
-          )}
-        </Paper>
-
-        {/* Friend Suggestions Section - Only show for own profile */}
-        {isOwnProfile && (
-          <Paper sx={{ p: 4, borderRadius: 2 }}>
-            <Typography variant="h5" sx={{ mb: 3 }}>People You May Know</Typography>
-            
-            {suggestionsError && (<Alert severity="error" sx={{ mb: 3 }}>{suggestionsError}</Alert>)}
-            
-            {loadingSuggestions ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
-            ) : suggestions.length > 0 ? (
-              <Grid container spacing={2}>
-                {suggestions.map((suggestion) => (
-                  <Grid size={{xs:12,sm:6,md:4,lg:3}} key={suggestion._id}>
-                    <Paper 
-                      variant="outlined" 
-                      sx={{ 
-                        p: 2, 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        alignItems: 'center',
-                        height: '100%', 
-                        transition: 'transform 0.2s, box-shadow 0.2s',
-                        '&:hover': {
-                          transform: 'translateY(-4px)',
-                          boxShadow: 3
-                        }
-                      }}
-                    >
-                      <Avatar 
-                        src={getFullImageUrl(suggestion.profilePicture, 'profile')} 
-                        alt={suggestion.username}
-                        sx={{ width: 80, height: 80, mb: 1 }}
-                        onClick={() => router.push(`/profile/${suggestion._id}`)}
-                        style={{ cursor: 'pointer' }}
-                      />
-                      <Typography 
-                        variant="subtitle1" 
-                        sx={{ 
-                          fontWeight: 'bold', 
-                          textAlign: 'center',
-                          cursor: 'pointer',
-                          '&:hover': { textDecoration: 'underline' }
-                        }}
-                        onClick={() => router.push(`/profile/${suggestion._id}`)}
-                      >
-                        {suggestion.firstName} {suggestion.lastName}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-                        @{suggestion.username}
-                      </Typography>
-                      
-                      {suggestion.mutualFriendsCount && suggestion.mutualFriendsCount > 0 && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: 'center' }}>
-                          {suggestion.mutualFriendsCount} mutual friend{suggestion.mutualFriendsCount !== 1 ? 's' : ''}
-                        </Typography>
-                      )}
-                      
-                      <Box sx={{ mt: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        <Button 
-                          variant={suggestion.isRequested ? "outlined" : "contained"} 
-                          size="small" 
-                          startIcon={<PersonAddIcon />}
-                          fullWidth
-                          disabled={suggestion.isRequested}
-                          onClick={() => !suggestion.isRequested && handleSendFriendRequest(suggestion._id)}
-                        >
-                          {suggestion.isRequested ? 'Request Sent' : 'Add Friend'}
-                        </Button>
-                        
-                        <Button 
-                          variant={suggestion.isFollowing ? "outlined" : "text"} 
-                          size="small"
-                          fullWidth
-                          onClick={() => suggestion.isFollowing ? 
-                            handleUnfollowFriend(suggestion._id) : 
-                            handleFollowFriend(suggestion._id)}
-                        >
-                          {suggestion.isFollowing ? 'Unfollow' : 'Follow'}
-                        </Button>
-                      </Box>
-                    </Paper>
-                  </Grid>
-                ))}
-              </Grid>
-            ) : (
-              <Box sx={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                py: 6, 
-                textAlign: 'center',
-                bgcolor: 'background.default',
-                borderRadius: 1
-              }}>
-                <PersonIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
-                <Typography variant="h6" color="text.secondary">
-                  No suggestions available right now
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  We&apos;ll show you people you might know once you start connecting with others.
-                </Typography>
-              </Box>
-            )}
-          </Paper>
-        )}
+        <FriendsTab
+          profile={profile}
+          isOwnProfile={isOwnProfile || false}
+          onDebugMessage={(message) => {
+              setDebug(prev => [...prev, message]);
+          }}
+        />
       </Box>
-
       {/* Photos Tab */}
       <Box sx={{ display: tabValue === 3 ? 'block' : 'none' }}>
-        <Paper sx={{ p: 4, borderRadius: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h5">Photos</Typography>
-            {isOwnProfile && (
-              <Button 
-                variant="outlined" 
-                startIcon={<ImageIcon />} 
-                onClick={handleOpenPhotoUpload}
-              >
-                Upload Photos
-              </Button>
-            )}
-          </Box>
-          
-          {uploadSuccess && (
-            <Alert severity="success" sx={{ mb: 3 }}>
-              Photo uploaded successfully!
-            </Alert>
-          )}
-          
-          {photosError && (<Alert severity="error" sx={{ mb: 3 }}>{photosError}</Alert>)}
-          
-          {loadingPhotos ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : photosData.length > 0 ? (
-            <ImageList variant="masonry" cols={getGridCols()} gap={8}>
-              {photosData.map((photo) => (
-                <ImageListItem 
-                  key={photo._id} 
-                  onClick={() => handlePhotoClick(photo)} 
-                  sx={{ 
-                    cursor: 'pointer', 
-                    '&:hover': { 
-                      opacity: 0.9, 
-                      transform: 'scale(1.02)', 
-                      transition: 'all 0.2s ease-in-out' 
-                    } 
-                  }}
-                >
-                  <img 
-                    src={photo.url} 
-                    alt={photo.caption || 'Photo'} 
-                    loading="lazy" 
-                    style={{ 
-                      borderRadius: 8, 
-                      display: 'block', 
-                      width: '100%', 
-                      height: 'auto' 
-                    }} 
-                    onError={(e) => { 
-                      console.error(`Failed to load image: ${photo.url}`); 
-                      (e.target as HTMLImageElement).src = '/images/placeholder-image.png';
-                    }}
-                  />
-                  <ImageListItemBar 
-                    title={photo.caption} 
-                    subtitle={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <LikeIcon fontSize="small" sx={{ mr: 0.5 }} />
-                          {photo.likes || 0}
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <CommentIcon fontSize="small" sx={{ mr: 0.5 }} />
-                          {photo.comments || 0}
-                        </Box>
-                      </Box>
-                    } 
-                    sx={{ borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }}
-                  />
-                </ImageListItem>
-              ))}
-            </ImageList>
-          ) : (
-            <Box sx={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              py: 6, 
-              textAlign: 'center', 
-              bgcolor: 'background.default', 
-              borderRadius: 1 
-            }}>
-              <ImageIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary">
-                {isOwnProfile ? 'You have no photos yet' : `${profile.firstName} has no photos to display`}
-              </Typography>
-              {isOwnProfile && (
-                <Button 
-                  variant="contained" 
-                  startIcon={<ImageIcon />} 
-                  sx={{ mt: 2 }} 
-                  onClick={handleOpenPhotoUpload}
-                >
-                  Upload Photos
-                </Button>
-              )}
-            </Box>
-          )}
-        </Paper>
-        
-        {/* Photo Upload Dialog */}
-        <Dialog 
-          open={photoUploadOpen} 
-          onClose={handleClosePhotoUpload}
-          fullWidth
-          maxWidth="md"
-        >
-          <DialogTitle>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="h6">Upload Photos</Typography>
-              <IconButton edge="end" color="inherit" onClick={handleClosePhotoUpload} aria-label="close">
-                <CloseIcon />
-              </IconButton>
-            </Box>
-          </DialogTitle>
-          <DialogContent dividers>
-            {uploadSuccess && (
-              <Alert severity="success" sx={{ mb: 2 }}>
-                Photo uploaded successfully!
-              </Alert>
-            )}
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="body1" gutterBottom>
-                Share photos with your friends and followers
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Add a caption to describe your photo.
-              </Typography>
-            </Box>
-            
-            <PostForm 
-              initialMode="photo"
-              disableTextOnly={true}
-              onSubmitSuccess={handleUploadSuccess}
-              customSubmitButtonText="Upload Photo"
-              dialogMode={true}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleClosePhotoUpload} color="primary">
-              {uploadSuccess ? 'Done' : 'Cancel'}
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <PhotosTab
+          profile={profile}
+          isOwnProfile={isOwnProfile || false}
+          userPostsData={userPostsData} // Pass the posts data down
+          onDebugMessage={(message) => {
+            setDebug(prev => [...prev, message]);
+          }}
+        />
       </Box>
 
-      {process.env.NODE_ENV !== 'production' && ( <Paper sx={{ p: 2, mt: 3, maxHeight: 200, overflow: 'auto', fontSize: '0.7rem' }}> <Typography variant="subtitle2">Debug Info:</Typography> {debug.map((msg, i) => (<Typography key={i} variant="caption" display="block">{msg}</Typography>))} </Paper> )}
+      {process.env.NODE_ENV !== 'production' && ( 
+        <Paper sx={{ p: 2, mt: 3, maxHeight: 200, overflow: 'auto', fontSize: '0.7rem' }}> 
+          <Typography variant="subtitle2">Debug Info:</Typography> 
+          {debug.map((msg, i) => (
+            <Typography key={i} variant="caption" display="block">{msg}</Typography>
+          ))} 
+        </Paper> 
+      )}
+        {profile && listOpen && (
+        <FollowersList
+          userId={profile._id}
+          type={listOpen}
+          isOpen={!!listOpen}
+          onClose={() => setListOpen(null)}
+          currentUserId={currentUser?._id}
+        />
+      )}
     </Container>
   );
 };

@@ -17,23 +17,11 @@ import { PhotoCamera, Save as SaveIcon } from '@mui/icons-material';
 import useAuth from '../../hooks/useAuth'; // Adjust path as needed
 import api from '../../utils/api'; // Your configured axios instance
 import { getFullImageUrl } from '../../utils/imgUrl';
-import axios from 'axios';
+
 // Define a type for API errors
 interface ApiError {
-  response?: {
-    data?: {
-      message?: string;
-      [key: string]: unknown;
-    };
-    status?: number;
-    [key: string]: unknown;
-  };
+  response?: { data?: { message?: string; }; };
   message?: string;
-  config?: {
-    headers?: Record<string, string>;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
 }
 
 interface ProfileFormData {
@@ -48,8 +36,6 @@ interface ProfileFormData {
 const EditProfilePage: FC = () => {
   const { user, token, updateUserInContext, loading: authLoading } = useAuth();
 
-  console.log('[EditProfilePage] User from useAuth():', user, 'AuthLoading:', authLoading);
-
   const [formData, setFormData] = useState<ProfileFormData>({
     firstName: '', lastName: '', username: '', email: '', bio: '', location: '',
   });
@@ -59,40 +45,33 @@ const EditProfilePage: FC = () => {
   const [coverPhotoFile, setCoverPhotoFile] = useState<File | null>(null);
   const [coverPhotoPreview, setCoverPhotoPreview] = useState<string | null>(null);
 
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const [loadingProfilePic, setLoadingProfilePic] = useState(false);
-  const [loadingCoverPhoto, setLoadingCoverPhoto] = useState(false);
-
+  const [loading, setLoading] = useState(false); // Single loading state for the main save button
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    console.log('[EditProfilePage] useEffect triggered. User from context:', user);
-    if (user) {
-      setFormData({
-        firstName: user.firstName || '',
-        lastName: user.lastName || '',
-        username: user.username || '',
-        email: user.email || '',
-        bio: user.bio || '',
-        location: user.location || '',
-      });
-
-      const currentProfilePicValue = user.profilePicture;
-      const generatedProfilePicUrl = getFullImageUrl(currentProfilePicValue, 'profile');
-      console.log(`[EditProfilePage] useEffect - User Profile Pic Value (from context): "${currentProfilePicValue}", Generated URL for preview: "${generatedProfilePicUrl}"`);
-      setProfilePicturePreview(generatedProfilePicUrl);
-
-      const currentCoverPhotoValue = user.coverPhoto;
-      const generatedCoverPhotoUrl = getFullImageUrl(currentCoverPhotoValue, 'cover'); // Type is 'cover'
-      console.log(`[EditProfilePage] useEffect - User Cover Photo Value (from context): "${currentCoverPhotoValue}", Generated URL for preview: "${generatedCoverPhotoUrl}"`);
-      setCoverPhotoPreview(generatedCoverPhotoUrl);
-    } else {
-        console.log('[EditProfilePage] useEffect - User is null, resetting previews to default.');
-        setProfilePicturePreview(getFullImageUrl(undefined, 'profile'));
-        setCoverPhotoPreview(getFullImageUrl(undefined, 'cover'));
-    }
-  }, [user]);
+ useEffect(() => {
+  console.log('useEffect triggered, user:', user);
+  if (user) {
+    console.log('Setting form data...');
+    console.log('user.coverPhoto:', user.coverPhoto);
+    console.log('user.coverPhotoUrl:', user);
+    
+    setFormData({
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      username: user.username || '',
+      email: user.email || '',
+      bio: user.bio || '',
+      location: user.location || '',
+    });
+    
+    setProfilePicturePreview(getFullImageUrl(user.profilePicture, 'profile'));
+    
+    const coverPhotoUrl = getFullImageUrl(user.coverPhoto, 'cover');
+    console.log('Cover photo URL from getFullImageUrl:', coverPhotoUrl);
+    setCoverPhotoPreview(coverPhotoUrl);
+   }
+  }, [user]); 
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -104,7 +83,6 @@ const EditProfilePage: FC = () => {
   ) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      console.log(`[EditProfilePage] handleFileChange - ${fileType} selected:`, file);
       const reader = new FileReader();
       reader.onloadend = () => {
         if (fileType === 'profilePicture') {
@@ -116,162 +94,85 @@ const EditProfilePage: FC = () => {
         }
       };
       reader.readAsDataURL(file);
-    } else {
-      console.log(`[EditProfilePage] handleFileChange - ${fileType} cleared.`);
-      if (fileType === 'profilePicture') {
-        setProfilePictureFile(null);
-        setProfilePicturePreview(getFullImageUrl(user?.profilePicture, 'profile'));
-      } else {
-        setCoverPhotoFile(null);
-        setCoverPhotoPreview(getFullImageUrl(user?.coverPhoto, 'cover'));
-      }
     }
   };
 
-  // FIXED: Handle submit details function with improved bio handling
-  const handleSubmitDetails = async (e: FormEvent) => {
+  // --- UNIFIED SUBMIT FUNCTION ---
+  // --- DEBUG VERSION OF handleSubmit ---
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setLoadingDetails(true);
-    setError(null);
-    setSuccessMessage(null);
-    
-    try {
-      // Log what we're sending for debugging
-      console.log('[EditProfilePage] handleSubmitDetails - Sending data:', {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        bio: formData.bio,
-        location: formData.location
-      });
-      
-      // Only send the fields that should be updated
-      const updateData = {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        bio: formData.bio || '',  // Ensure bio is a string, even if empty
-        location: formData.location || ''  // Ensure location is a string, even if empty
-      };
-      
-      // Make the API call
-      const res = await api.put('/users/profile', updateData, {
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-      });
-      
-      // Log what we got back
-      console.log('[EditProfilePage] handleSubmitDetails - Response:', res.data);
-      
-      // Update the user in context
-      updateUserInContext(res.data);
-      setSuccessMessage('Profile details updated successfully!');
-    } catch (err: unknown) {
-      // Enhanced error logging
-      const error = err as ApiError;
-      console.error('[EditProfilePage] handleSubmitDetails - Error:', err);
-      
-      // Log more details if available
-      if (error.response) {
-        console.error('[EditProfilePage] handleSubmitDetails - Response data:', error.response.data);
-        console.error('[EditProfilePage] handleSubmitDetails - Status:', error.response.status);
-      }
-      
-      setError(error.response?.data?.message || error.message || 'Failed to update profile details.');
-    } finally {
-      setLoadingDetails(false);
-    }
-  };
-
-  const handleUploadImage = async (
-    type: 'profilePicture' | 'coverPhoto',
-    file: File | null,
-    setLoadingState: React.Dispatch<React.SetStateAction<boolean>>
-  ) => {
-    console.log(`[EditProfilePage] handleUploadImage - Attempting to upload for type "${type}". File object:`, file);
-
-    if (!file) {
-      setError(`No ${type === 'profilePicture' ? 'profile picture' : 'cover photo'} selected. Please choose a file first.`);
-      console.error(`[EditProfilePage] handleUploadImage - Frontend check failed: File object is null for type "${type}".`);
-      return;
-    }
-
-    setLoadingState(true);
+    setLoading(true);
     setError(null);
     setSuccessMessage(null);
 
-    const uploadFormData = new FormData();
-    uploadFormData.append(type, file);
-
-    console.log(`[EditProfilePage] handleUploadImage - FormData to be sent for type "${type}":`);
-    for (const pair of uploadFormData.entries()) {
-      console.log(`  FormData Entry - ${pair[0]}:`, pair[1]);
-    }
-
-    const endpoint = type === 'profilePicture' ? '/users/profile/picture' : '/users/profile/cover';
-
     try {
-      console.log(`[EditProfilePage] Making ${type} upload request to: ${endpoint}`);
-      
-      // Create a custom axios instance for this request only
-      // This prevents the default Content-Type from being applied
-      const res = await axios.post(`${api.defaults.baseURL}${endpoint}`, uploadFormData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          // EXPLICITLY set Content-Type to undefined so browser sets it automatically
-          'Content-Type': undefined  
-        },
-      });
+      // This object will accumulate all successful updates.
+      let accumulatedUpdates = {};
 
-      console.log(`[EditProfilePage] handleUploadImage - Success! Response for ${type}:`, res.data);
-
-      if (type === 'profilePicture') {
-        if (res.data.profilePicture) {
-          updateUserInContext({ profilePicture: res.data.profilePicture });
-        }
-        setProfilePicturePreview(res.data.profilePictureUrl || getFullImageUrl(res.data.profilePicture, 'profile'));
+      // Step 1: Upload Profile Picture if a new one is selected.
+      if (profilePictureFile) {
+        console.log('Uploading new profile picture...');
+        const picFormData = new FormData();
+        picFormData.append('profilePicture', profilePictureFile);
+        const picRes = await api.post('/users/profile/picture', picFormData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        accumulatedUpdates = { ...accumulatedUpdates, ...picRes.data };
         setProfilePictureFile(null);
-      } else if (type === 'coverPhoto') {
-        if (res.data.coverPhoto) {
-          updateUserInContext({ coverPhoto: res.data.coverPhoto });
-        }
-        setCoverPhotoPreview(res.data.coverPhotoUrl || getFullImageUrl(res.data.coverPhoto, 'cover'));
+      }
+
+      // Step 2: Upload Cover Photo if a new one is selected.
+      if (coverPhotoFile) {
+        const coverFormData = new FormData();
+        coverFormData.append('coverPhoto', coverPhotoFile);
+        const coverRes = await api.post('/users/profile/cover', coverFormData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        accumulatedUpdates = { ...accumulatedUpdates, ...coverRes.data };
         setCoverPhotoFile(null);
       }
-      setSuccessMessage(`${type === 'profilePicture' ? 'Profile picture' : 'Cover photo'} updated successfully!`);
+
+      // Step 3: Update text details.
+      console.log('Updating profile text details...');
+      await api.put('/users/profile', {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        bio: formData.bio || '',
+        location: formData.location || '',
+      });
+      
+      // Construct the final update manually
+      const finalUpdates = {
+        ...user, // Start with current user data
+        ...accumulatedUpdates, // Apply any image updates
+        // Apply form data updates
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        bio: formData.bio || '',
+        location: formData.location || '',
+      };
+
+
+      // Step 4: Update the user context with the final, merged data.
+      updateUserInContext(finalUpdates);
+      setSuccessMessage('Profile updated successfully!');
+
     } catch (err: unknown) {
       const error = err as ApiError;
-      console.error(`[EditProfilePage] handleUploadImage - Error during API call for type "${type}":`, err);
-      
-      // Enhanced error logging
-      if (error.response) {
-        console.error(`Response status: ${error.response.status}`);
-        console.error('Response data:', error.response.data);
-        
-        if (error.config) {
-          console.error('Request headers:', error.config.headers);
-        }
-      }
-      
-      setError(error.response?.data?.message || error.message || `Failed to upload ${type}.`);
+      console.error('Failed to update profile:', err);
+      setError(error.response?.data?.message || 'An unexpected error occurred.');
     } finally {
-      setLoadingState(false);
+      setLoading(false);
     }
   };
 
   if (authLoading || !user) {
-    console.log('[EditProfilePage] Auth loading or user not available, showing spinner.');
     return (
       <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
         <CircularProgress />
       </Container>
     );
   }
-
-  const finalAvatarSrc = profilePicturePreview || getFullImageUrl(user.profilePicture, 'profile');
-  const finalCoverSrc = coverPhotoPreview || getFullImageUrl(user.coverPhoto, 'cover'); // Type is 'cover'
-  console.log(`[EditProfilePage] Rendering. Final Avatar Src: "${finalAvatarSrc}", User Profile Pic from context: "${user.profilePicture}"`);
-  console.log(`[EditProfilePage] Rendering. Final Cover Src: "${finalCoverSrc}", User Cover Photo from context: "${user.coverPhoto}"`);
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
@@ -280,196 +181,94 @@ const EditProfilePage: FC = () => {
           Edit Profile
         </Typography>
 
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        {successMessage && <Alert severity="success" sx={{ mb: 2 }}>{successMessage}</Alert>}
+        {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+        {successMessage && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMessage(null)}>{successMessage}</Alert>}
 
-        <Box sx={{ textAlign: 'center', mb: 4 }}>
-          <Avatar
-            src={finalAvatarSrc}
-            alt={user.username || 'User Avatar'}
-            sx={{ width: 150, height: 150, margin: '0 auto 16px', border: '3px solid', borderColor: 'primary.main' }}
-          />
-          
-          {/* Custom file upload for profile picture - improved to hide redundant elements */}
-          <input
-            type="file"
-            id="profile-picture-upload"
-            accept="image/*"
-            onChange={(e: ChangeEvent<HTMLInputElement>) => handleFileChange(e, 'profilePicture')}
-            style={{ display: 'none' }} // Completely hide the input
-          />
-          
-          <Button
-            variant="outlined"
-            component="label"
-            startIcon={<PhotoCamera />}
-            disabled={loadingProfilePic}
-            onClick={() => document.getElementById('profile-picture-upload')?.click()}
-          >
-            Change Profile Picture
-          </Button>
-          
-          {profilePictureFile && (
+        <Box component="form" onSubmit={handleSubmit} noValidate>
+          {/* --- Profile Picture Section --- */}
+          <Box sx={{ textAlign: 'center', mb: 4 }}>
+            <Avatar
+              src={profilePicturePreview || undefined}
+              alt={user.username || 'User Avatar'}
+              sx={{ width: 150, height: 150, margin: '0 auto 16px', border: '3px solid', borderColor: 'primary.main' }}
+            />
             <Button
-              variant="contained"
-              onClick={() => handleUploadImage('profilePicture', profilePictureFile, setLoadingProfilePic)}
-              disabled={loadingProfilePic || !profilePictureFile}
-              sx={{ ml: 2 }}
-              startIcon={loadingProfilePic ? <CircularProgress size={20} color="inherit"/> : <SaveIcon />}
+              variant="outlined"
+              component="label"
+              startIcon={<PhotoCamera />}
             >
-              Upload Picture
+              Change Profile Picture
+              <input
+                type="file"
+                hidden
+                accept="image/*"
+                onChange={(e) => handleFileChange(e, 'profilePicture')}
+              />
             </Button>
-          )}
-        </Box>
-        <Divider sx={{my: 2}} />
-
-        <Box sx={{ textAlign: 'center', mb: 4 }}>
-          <Typography variant="h6" gutterBottom>Cover Photo</Typography>
-          <Box
-            sx={{
-              width: '100%',
-              height: 200,
-              border: '2px dashed grey',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mb: 2,
-              backgroundImage: `url(${finalCoverSrc})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              color: (coverPhotoPreview || (user.coverPhoto && user.coverPhoto !== 'default-cover.png')) ? 'transparent' : 'text.secondary',
-              borderRadius: 1,
-            }}
-          >
-            {!(coverPhotoPreview || (user.coverPhoto && user.coverPhoto !== 'default-cover.png')) && "No Cover Photo / Preview"}
           </Box>
-          
-          {/* Custom file upload for cover photo - improved to hide redundant elements */}
-          <input
-            type="file"
-            id="cover-photo-upload"
-            accept="image/*"
-            onChange={(e: ChangeEvent<HTMLInputElement>) => handleFileChange(e, 'coverPhoto')}
-            style={{ display: 'none' }} // Completely hide the input
-          />
-          
-          <Button
-            variant="outlined"
-            component="label"
-            startIcon={<PhotoCamera />}
-            disabled={loadingCoverPhoto}
-            onClick={() => document.getElementById('cover-photo-upload')?.click()}
-          >
-            Change Cover Photo
-          </Button>
-          
-          {coverPhotoFile && (
-            <Button
-              variant="contained"
-              onClick={() => handleUploadImage('coverPhoto', coverPhotoFile, setLoadingCoverPhoto)}
-              disabled={loadingCoverPhoto || !coverPhotoFile}
-              sx={{ ml: 2 }}
-              startIcon={loadingCoverPhoto ? <CircularProgress size={20} color="inherit"/> : <SaveIcon />}
-            >
-              Upload Cover
-            </Button>
-          )}
-        </Box>
-        <Divider sx={{my: 2}} />
+          <Divider sx={{ my: 2 }} />
 
-        <Typography variant="h6" gutterBottom sx={{mt: 3}}>Profile Details</Typography>
-        <Box component="form" onSubmit={handleSubmitDetails} noValidate sx={{ mt: 1 }}>
+          {/* --- Cover Photo Section --- */}
+          <Box sx={{ textAlign: 'center', mb: 4 }}>
+            <Typography variant="h6" gutterBottom>Cover Photo</Typography>
+            <Box
+              sx={{
+                width: '100%', height: 200, border: '2px dashed grey',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2,
+                backgroundImage: `url(${coverPhotoPreview || ''})`,
+                backgroundSize: 'cover', backgroundPosition: 'center',
+                color: 'transparent', borderRadius: 1,
+              }}
+            />
+            <Button
+              variant="outlined"
+              component="label"
+              startIcon={<PhotoCamera />}
+            >
+              Change Cover Photo
+              <input
+                type="file"
+                hidden
+                accept="image/*"
+                onChange={(e) => handleFileChange(e, 'coverPhoto')}
+              />
+            </Button>
+          </Box>
+          <Divider sx={{ my: 2 }} />
+
+          {/* --- Profile Details Section --- */}
+          <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Profile Details</Typography>
           <Grid container spacing={2}>
-            {/* Keep using size prop as in your original code */}
             <Grid size={{xs:12, sm:6}}>
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="firstName"
-                label="First Name"
-                name="firstName"
-                autoComplete="given-name"
-                value={formData.firstName}
-                onChange={handleChange}
-              />
+              <TextField fullWidth label="First Name" name="firstName" value={formData.firstName} onChange={handleChange} />
             </Grid>
-            <Grid size={{xs:12, sm:6}} >
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="lastName"
-                label="Last Name"
-                name="lastName"
-                autoComplete="family-name"
-                value={formData.lastName}
-                onChange={handleChange}
-              />
+            <Grid size={{xs:12, sm:6}}>
+              <TextField fullWidth label="Last Name" name="lastName" value={formData.lastName} onChange={handleChange} />
             </Grid>
-            <Grid size={{xs:12}} >
-              <TextField
-                margin="normal"
-                fullWidth
-                id="username"
-                label="Username"
-                name="username"
-                autoComplete="username"
-                value={formData.username}
-                onChange={handleChange}
-                disabled
-              />
+            <Grid size={{xs:12}}>
+              <TextField fullWidth label="Username" name="username" value={formData.username} disabled />
             </Grid>
-            <Grid size={{xs:12}} >
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="email"
-                label="Email Address"
-                name="email"
-                autoComplete="email"
-                value={formData.email}
-                disabled
-              />
+            <Grid size={{xs:12}}>
+              <TextField fullWidth label="Email Address" name="email" value={formData.email} disabled />
             </Grid>
-            <Grid size={{xs:12}} >
-              <TextField
-                margin="normal"
-                fullWidth
-                id="bio"
-                label="Bio"
-                name="bio"
-                multiline
-                rows={4}
-                value={formData.bio}
-                onChange={handleChange}
-                placeholder="Tell us about yourself..."
-                inputProps={{ maxLength: 500 }} // Add max length
-              />
+            <Grid size={{xs:12}}>
+              <TextField fullWidth label="Bio" name="bio" multiline rows={4} value={formData.bio} onChange={handleChange} placeholder="Tell us about yourself..." />
             </Grid>
-            <Grid size={{xs:12}} >
-              <TextField
-                margin="normal"
-                fullWidth
-                id="location"
-                label="Location"
-                name="location"
-                autoComplete="address-level2"
-                value={formData.location}
-                onChange={handleChange}
-              />
+            <Grid size={{xs:12}}>
+              <TextField fullWidth label="Location" name="location" value={formData.location} onChange={handleChange} />
             </Grid>
           </Grid>
+
+          {/* --- SINGLE SAVE BUTTON --- */}
           <Button
             type="submit"
             fullWidth
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
-            disabled={loadingDetails}
-            startIcon={loadingDetails ? <CircularProgress size={20} color="inherit"/> : <SaveIcon />}
+            disabled={loading}
+            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
           >
-            Save Profile Details
+            Save All Changes
           </Button>
         </Box>
       </Paper>
