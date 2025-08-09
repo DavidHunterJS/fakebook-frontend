@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import {
   Box,
   Paper,
@@ -19,19 +19,16 @@ import {
   CardContent,
   Fab,
   CircularProgress,
-  Button,
   Tooltip,
   Popover,
   Zoom,
   Grow,
   Chip,
-  AvatarGroup
 } from '@mui/material';
 import {
   Search,
   Send,
   AttachFile,
-  EmojiEmotions,
   Phone,
   VideoCall,
   Info,
@@ -47,9 +44,9 @@ import { useSocket } from '../../context/SocketContext';
 import axiosInstance from '../../utils/api';
 import NewChatModal from './NewChatModal';
 import { getProfileImageUrl } from '../../utils/imgUrl';
-import { SxProps, Theme } from '@mui/material';
 import { useMessageVisibility } from '../../hooks/useMessageVisibility';
 import { ReadReceiptIndicator } from './ReadReceiptIndicator';
+import { Socket } from 'socket.io-client';
 
 // --- INTERFACES ---
 
@@ -117,7 +114,7 @@ interface Message {
   _id: string;
   conversationId: string;
   senderId: string;
-  content: { text?: string; file?: FileContent; gif?: any };
+  content: { text?: string; file?: FileContent; gif?: { url: string } };
   messageType: 'text' | 'file' | 'gif' | 'system';
   timestamp: string;
   reactions?: Reaction[];
@@ -144,11 +141,20 @@ interface MessageBubbleProps {
 }
 
 interface EnhancedMessageBubbleProps extends MessageBubbleProps {
-  socket: any;
+  socket: Socket | null;
   isConnected: boolean;
   activeConv: Conversation | undefined;
 }
-
+interface NewMessageData {
+    message: Message;
+    sender?: {
+    _id: string;
+    username: string;
+    firstName: string;
+    lastName: string;
+    profilePicture?: string;
+  };
+}
 
 // --- CHILD COMPONENTS ---
 
@@ -237,7 +243,9 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(({
     </ListItem>
   );
 });
+ConversationItem.displayName = 'ConversationItem';
 
+memo(ConversationItem); 
 
 // --- MAIN COMPONENT ---
 const ChatLayout: React.FC<ChatLayoutProps> = ({ initialConversationId }) => {
@@ -254,7 +262,6 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialConversationId }) => {
   const [typingUsers, setTypingUsers] = useState<{ [key: string]: { username: string; firstName: string; lastName: string } }>({});
   const [isTyping, setIsTyping] = useState(false);
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [reactionAnchor, setReactionAnchor] = useState<HTMLElement | null>(null);
@@ -421,6 +428,8 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialConversationId }) => {
     </Box>
   );
 });
+EnhancedMessageBubble.displayName = 'EnhancedMessageBubble'
+memo(EnhancedMessageBubble);
 
   // --- LOGIC AND useEffect HOOKS ---
   
@@ -495,7 +504,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialConversationId }) => {
       setTypingUsers({});
     }
 
-    const handleNewMessage = (data: { message: Message; sender: any }) => {
+    const handleNewMessage = (data: NewMessageData) => {
       if (data.message.conversationId === activeConversation) {
         setMessages(prev => [...prev, { ...data.message, sender: data.sender }]);
       }
@@ -581,12 +590,12 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialConversationId }) => {
   }, [activeConversation, uploadingFile]);
   
   const handleFileSelect = (files: FileList | null) => { if (files && files.length > 0) uploadFile(files[0]); };
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
-  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(false); };
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault(); setIsDragOver(false);
-    if (e.dataTransfer.files?.length > 0) uploadFile(e.dataTransfer.files[0]);
-  };
+  // const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
+  // const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(false); };
+  // const handleDrop = (e: React.DragEvent) => {
+  //   e.preventDefault(); setIsDragOver(false);
+  //   if (e.dataTransfer.files?.length > 0) uploadFile(e.dataTransfer.files[0]);
+  // };
 
   const handleTyping = useCallback(() => {
     if (!socket || !activeConversation) return;

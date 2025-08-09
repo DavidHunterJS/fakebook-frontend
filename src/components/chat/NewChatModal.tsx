@@ -27,6 +27,7 @@ import {
   Close
 } from '@mui/icons-material';
 import { getProfileImageUrl } from '../../utils/imgUrl';
+import axios, {AxiosInstance} from 'axios';
 
 interface User {
   _id: string;
@@ -36,13 +37,21 @@ interface User {
   profilePicture?: string;
   isOnline?: boolean;
 }
-
+interface SearchedUser {
+  _id: string;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  profilePicture?: string;
+  profileImage?: string; // Including the alternative property
+  isOnline?: boolean;
+}
 interface NewChatModalProps {
   open: boolean;
   onClose: () => void;
   onConversationCreated: (conversationId: string) => void;
   currentUser: User;
-  axiosInstance: any;
+  axiosInstance: AxiosInstance;
 }
 
 const NewChatModal: React.FC<NewChatModalProps> = ({
@@ -131,8 +140,8 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
       
       // Filter out current user and ensure users have required fields
       const filteredUsers = users
-        .filter((user: any) => user._id !== currentUser._id)
-        .map((user: any) => ({
+        .filter((user: User) => user._id !== currentUser._id)
+        .map((user: SearchedUser) => ({
           _id: user._id,
           username: user.username || '',
           firstName: user.firstName || '',
@@ -187,80 +196,49 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
         participantIds,
         type: isGroup ? 'group' : 'direct',
         ...(isGroup && { name: groupName.trim() }),
-        settings: {
-          allowFileSharing: true,
-          allowGifs: true,
-          maxFileSize: 50 * 1024 * 1024 // 50MB
-        }
       };
-
-      console.log('🚀 Creating conversation with data:', conversationData);
 
       const response = await axiosInstance.post('/conversations', conversationData);
       
-      console.log('✅ Response received:', response.data);
-      console.log('📨 Response status:', response.status);
-      
-      // Handle both new conversation (201) and existing conversation (200)
-      if ((response.status === 200 || response.status === 201) && response.data.conversation?._id) {
+      if (response.data.conversation?._id) {
         const conversationId = response.data.conversation._id;
-        console.log('💬 Conversation ID:', conversationId);
-        
-        // Call the callback to navigate to conversation
-        console.log('🔄 Calling onConversationCreated with ID:', conversationId);
         onConversationCreated(conversationId);
-        
-        // Close modal after brief delay to ensure navigation completes
-        setTimeout(() => {
-          console.log('🚪 Closing modal after successful navigation');
-          handleClose();
-        }, 300);
-        
+        setTimeout(() => handleClose(), 300);
       } else {
-        throw new Error('Invalid response: missing conversation ID');
+        throw new Error('Invalid response from server');
       }
       
-    } catch (error: any) {
+    } catch (error: unknown) { // Use unknown for type safety
       console.error('❌ Error creating conversation:', error);
-      console.error('📊 Error response:', error.response?.data);
-      console.error('🔢 Error status:', error.response?.status);
-      
-      // Handle the case where conversation already exists (backend returns 400 but provides conversationId)
-      if (error.response?.status === 400) {
-        const errorData = error.response.data;
-        console.log('🔍 Checking 400 error data:', errorData);
-        
-        // Check if it's the "conversation already exists" case
-        if (errorData?.conversationId) {
-          console.log('ℹ️ Conversation already exists, using existing ID:', errorData.conversationId);
-          const existingId = errorData.conversationId;
-          
-          // Navigate to existing conversation
-          onConversationCreated(existingId);
-          
-          // Close modal after navigation
-          setTimeout(() => {
-            console.log('🚪 Closing modal after existing conversation navigation');
-            handleClose();
-          }, 300);
-          
-          return; // Exit early, don't show error
+
+      if (axios.isAxiosError(error)) {
+        const errorData = error.response?.data;
+        console.error('📊 Error response:', errorData);
+
+        if (error.response?.status === 400) {
+          // Safely check for properties on the data object
+          if (errorData && typeof errorData.conversationId === 'string') {
+            console.log('ℹ️ Conversation already exists, using existing ID:', errorData.conversationId);
+            onConversationCreated(errorData.conversationId);
+            setTimeout(() => handleClose(), 300);
+            return;
+          }
+          if (errorData && typeof errorData.message === 'string') {
+            setError(errorData.message);
+            return;
+          }
+          setError('An invalid request was made.');
+        } else if (error.response?.status === 500) {
+          setError('A server error occurred. Please try again later.');
+        } else {
+          setError('An unknown error occurred.');
         }
-        
-        // Check if message indicates existing conversation
-        if (errorData?.message && errorData.message.toLowerCase().includes('already exists')) {
-          console.log('ℹ️ Conversation exists but no ID provided');
-          setError('This conversation already exists. Please check your conversation list.');
-          return;
-        }
-        
-        // Other 400 errors
-        console.log('❌ 400 error without conversationId:', errorData);
-        setError(errorData?.message || 'Invalid request');
-      } else if (error.response?.status === 500) {
-        setError('Server error. Please try again.');
+      } else if (error instanceof Error) {
+        // Handle non-Axios errors (e.g., network issues)
+        setError(error.message);
       } else {
-        setError(error.message || 'Failed to create conversation');
+        // Handle truly unexpected errors
+        setError('An unexpected error occurred.');
       }
     } finally {
       setLoading(false);
