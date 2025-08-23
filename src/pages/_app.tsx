@@ -5,7 +5,6 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../context/AuthContext';
 import { SocketProvider } from '../context/SocketContext';
-import { SignalProtocolProvider } from '../context/SignalContext';
 import Layout from '../components/layout/Layout';
 import { useRouter } from 'next/router';
 import { useContext } from 'react';
@@ -19,19 +18,8 @@ const theme = createTheme({
   // Your theme settings...
 });
 
-// Wrapper component to access auth context for Signal
-function SignalWrapper({ children }: { children: React.ReactNode }) {
-  const { token, user } = useContext(AuthContext);
-  
-  return (
-    <SignalProtocolProvider 
-      authToken={token} 
-      userId={user?._id || null}  // Remove the user?.id fallback
-    >
-      {children}
-    </SignalProtocolProvider>
-  );
-}
+
+
 
 // Inner component that has access to auth context
 function AppContent({ Component, pageProps }: AppProps) {
@@ -56,7 +44,6 @@ function AppContent({ Component, pageProps }: AppProps) {
     '/friends',
     '/settings/profile',
     '/aitoolbox',
-    '/signal-test' // Add our test page
   ];
   
   // Check if current path starts with /profile/ to match dynamic routes
@@ -66,7 +53,6 @@ function AppContent({ Component, pageProps }: AppProps) {
   const hideSidebars = noSidebarPaths.includes(router.pathname) || isProfilePage;
   
   return (
-    <SignalWrapper>
       <SocketProvider>
         <ThemeProvider theme={theme}>
           <CssBaseline />
@@ -75,7 +61,6 @@ function AppContent({ Component, pageProps }: AppProps) {
           </Layout>
         </ThemeProvider>
       </SocketProvider>
-    </SignalWrapper>
   );
 }
 
