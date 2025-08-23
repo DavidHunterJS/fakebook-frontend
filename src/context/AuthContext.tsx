@@ -4,10 +4,8 @@ import { isAxiosError } from 'axios';
 import axiosInstance from '../utils/api'; // Assuming your axios instance is in utils/api
 import { User } from '../types/user'; // Adjust path as needed
 
-
 // Helper function to normalize user data (ensure it's consistent)
 const normalizeUser = (userData: User | Partial<User> | Record<string, unknown> | null): User | null => {
-  // console.log('Raw user data for normalization:', userData);
   if (!userData) return null;
 
   const normalizedUser = { ...userData } as Partial<User>;
@@ -16,17 +14,14 @@ const normalizeUser = (userData: User | Partial<User> | Record<string, unknown> 
     normalizedUser._id = normalizedUser.id;
   }
 
-  // Ensure essential fields have default values if missing, but only if they are not being partially updated
   if (!('firstName' in normalizedUser) && !normalizedUser.firstName) normalizedUser.firstName = '';
   if (!('lastName' in normalizedUser) && !normalizedUser.lastName) normalizedUser.lastName = '';
   if (!('username' in normalizedUser) && !normalizedUser.username && normalizedUser.email) {
     normalizedUser.username = normalizedUser.email.split('@')[0];
   }
-  // Don't override profilePicture/coverPhoto with defaults if they are being explicitly set to empty or are already set
   if (!('profilePicture' in normalizedUser) && !normalizedUser.profileImage) normalizedUser.profileImage = 'default-avatar.png';
   if (!('coverPhoto' in normalizedUser) && !normalizedUser.coverPhoto) normalizedUser.coverPhoto = 'default-cover.png';
 
-  // console.log('Normalized user data:', normalizedUser);
   return normalizedUser as User;
 };
 
@@ -43,35 +38,33 @@ type AuthAction =
   | { type: 'LOGIN_SUCCESS'; payload: { user: User | Record<string, unknown>; token: string } }
   | { type: 'REGISTER_SUCCESS'; payload: { user: User | Record<string, unknown>; token: string } }
   | { type: 'USER_LOADED'; payload: { user: User | Record<string, unknown>; token: string } }
-  | { type: 'AUTH_ERROR'; payload?: string } // Optional payload for specific auth errors
+  | { type: 'AUTH_ERROR'; payload?: string }
   | { type: 'LOGIN_FAIL'; payload: string }
   | { type: 'REGISTER_FAIL'; payload: string }
   | { type: 'LOGOUT' }
-  | { type: 'PROFILE_UPDATED'; payload: { user: Partial<User> } }; // For profile updates
+  | { type: 'PROFILE_UPDATED'; payload: { user: Partial<User> } };
 
+// ✅ FIXED: Added authToken to the context type definition.
 interface AuthContextType extends AuthState {
+  authToken: string | null;
   login: (email: string, password: string) => Promise<User>;
   register: (firstName:string, lastName:string, username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
-  updateUserInContext: (updatedUserData: Partial<User>) => void; // To update user after profile edit
+  updateUserInContext: (updatedUserData: Partial<User>) => void;
 }
 
 const initialState: AuthState = {
   isAuthenticated: false,
   user: null,
   token: null,
-  loading: true, // Start with loading true to load user
+  loading: true,
   error: null,
 };
 
 const AuthContext = createContext<AuthContextType>({
   ...initialState,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    login: async (email: string, password: string) => {
-    // This default implementation will never be called, but it needs to match the type.
-    // Returning a rejected promise is a common pattern for this.
-    return Promise.reject(new Error('Login function not yet initialized.'));
-  },
+  authToken: null, // Add to initial context value
+  login: async () => Promise.reject(new Error('Login function not yet initialized.')),
   register: async () => {},
   logout: () => {},
   updateUserInContext: () => {},
@@ -80,11 +73,7 @@ const AuthContext = createContext<AuthContextType>({
 const authReducer = (state: AuthState, action: AuthAction): AuthState => {
   switch (action.type) {
     case 'LOADING':
-      return {
-        ...state,
-        loading: true,
-        error: null,
-      };
+      return { ...state, loading: true, error: null };
     case 'USER_LOADED':
       return {
         ...state,
@@ -108,46 +97,22 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
         error: null,
       };
     case 'PROFILE_UPDATED':
-        if (!state.user) return state; // Should not happen if user is logged in
+        if (!state.user) return state;
         return {
             ...state,
-            // Merge existing user data with the updated fields
             user: normalizeUser({ ...state.user, ...action.payload.user }),
         };
     case 'AUTH_ERROR':
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('token');
-      }
-      return {
-        ...state,
-        isAuthenticated: false,
-        user: null,
-        token: null,
-        loading: false,
-        // Use payload if provided, otherwise set error to null
-        error: action.payload || null,
-      };
     case 'LOGIN_FAIL':
     case 'REGISTER_FAIL':
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('token');
-      }
-      return {
-        ...state,
-        isAuthenticated: false,
-        user: null,
-        token: null,
-        loading: false,
-        // Use payload if available, otherwise a generic message
-        error: action.payload || 'An error occurred',
-      };
     case 'LOGOUT':
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
       }
       return {
-        ...initialState, // Reset to initial state, but keep loading false
+        ...initialState,
         loading: false,
+        error: (action.type !== 'LOGOUT' && action.payload) ? action.payload : null,
       };
     default:
       return state;
@@ -164,21 +129,9 @@ export const AuthProvider: FC<{children: ReactNode}> = ({ children }) => {
         return;
       }
       
-      // Check if we're on an auth page where no token is expected
-      const isAuthPage = () => {
-        const path = window.location.pathname;
-        return path === '/login' || path === '/register' || path === '/forgot-password';
-      };
-      
       const token = localStorage.getItem('token');
       if (!token) {
-        // Don't set an error message for auth pages
-        if (!isAuthPage()) {
-          dispatch({ type: 'AUTH_ERROR', payload: 'No token found.' });
-        } else {
-          // Just set loading to false without an error for auth pages
-          dispatch({ type: 'AUTH_ERROR' }); // No payload means no error message
-        }
+        dispatch({ type: 'AUTH_ERROR' });
         return;
       }
 
@@ -189,7 +142,7 @@ export const AuthProvider: FC<{children: ReactNode}> = ({ children }) => {
         dispatch({
           type: 'USER_LOADED',
           payload: { 
-            user: res.data.user || res.data, // Backend might return { user: ... } or user directly
+            user: res.data.user || res.data,
             token: token
           },
         });
@@ -204,7 +157,7 @@ export const AuthProvider: FC<{children: ReactNode}> = ({ children }) => {
   }, []);
 
   const extractErrorMessage = (error: unknown): string => {
-    if (isAxiosError(error)) { // Use the imported isAxiosError
+    if (isAxiosError(error)) {
       return error.response?.data?.message || error.message || 'An error occurred with the request';
     }
     if (error instanceof Error) {
@@ -218,13 +171,11 @@ export const AuthProvider: FC<{children: ReactNode}> = ({ children }) => {
     try {
       const res = await axiosInstance.post('/auth/login', { email, password });
       
-      // Set token in localStorage and axios headers
       if (typeof window !== 'undefined') {
         localStorage.setItem('token', res.data.token);
       }
       axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
       
-      // Dispatch login success to update state
       dispatch({
         type: 'LOGIN_SUCCESS',
         payload: res.data,
@@ -259,7 +210,6 @@ export const AuthProvider: FC<{children: ReactNode}> = ({ children }) => {
   };
 
   const updateUserInContext = (updatedUserData: Partial<User>) => {
-    console.log("AuthContext: Updating user with data:", updatedUserData);
     dispatch({ type: 'PROFILE_UPDATED', payload: { user: updatedUserData } });
   };
 
@@ -267,10 +217,12 @@ export const AuthProvider: FC<{children: ReactNode}> = ({ children }) => {
     <AuthContext.Provider
       value={{
         ...state,
+        // ✅ FIXED: Map the `token` from state to `authToken` for consumers.
+        authToken: state.token,
         login,
         register,
         logout,
-        updateUserInContext, // Provide this function to consumers
+        updateUserInContext,
       }}
     >
       {children}

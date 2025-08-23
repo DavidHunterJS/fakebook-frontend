@@ -1,5 +1,5 @@
 // components/chat/index.ts
-export { default as ChatLayout } from './ChatLayout';
+export { default as ChatLayout } from './ChatInterface';
 export { default as NewChatModal } from './NewChatModal';
 
 // When you break it into smaller components later, you can add:

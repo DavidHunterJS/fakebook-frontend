@@ -26,6 +26,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Use the environment variable for the URL
       const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL!, {
         auth: { token },
+        withCredentials: true,
       });
 
       setSocket(newSocket);

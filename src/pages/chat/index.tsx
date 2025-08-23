@@ -1,7 +1,7 @@
 // pages/chat/index.tsx
 import React from 'react';
 import { useRouter } from 'next/router';
-import ChatLayout from '../../components/chat/ChatLayout';
+import ChatLayout from '../../components/chat/ChatInterface';
 import useAuth from '../../hooks/useAuth';
 import { SocketProvider } from '../../context/SocketContext';
 

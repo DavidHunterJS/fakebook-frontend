@@ -1,14 +1,21 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { Box, Typography, Paper, Divider, Button } from '@mui/material';
+import { Box, Typography, Paper, Divider, Button, LinearProgress, Alert } from '@mui/material';
 import useAuth from '../hooks/useAuth';
 import LoginForm from '../components/auth/LoginForm';
 import { NextPageWithLayout } from '../types/next';
 import DemoCredentials from '../components/DemoCredentials';
 
 const Login: NextPageWithLayout = () => {
-  const { isAuthenticated } = useAuth();
+  const { 
+    isAuthenticated, 
+    loading, 
+    signalInitialized, 
+    signalLoading, 
+    signalError,
+    retrySignalInit 
+  } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -16,6 +23,16 @@ const Login: NextPageWithLayout = () => {
       router.push('/');
     }
   }, [isAuthenticated, router]);
+
+  // Determine current loading state
+  const getLoadingMessage = () => {
+    if (loading) return '🔐 Signing you in...';
+    if (signalLoading) return '🔒 Setting up encryption...';
+    if (signalInitialized) return '✅ Ready!';
+    return '';
+  };
+
+  const isLoading = loading || signalLoading;
 
   return (
     <Box
@@ -42,6 +59,36 @@ const Login: NextPageWithLayout = () => {
         <Typography variant="body1" color="textSecondary" gutterBottom>
           Connect with friends and the world around you
         </Typography>
+        
+        {/* Show loading progress during authentication and Signal setup */}
+        {isLoading && (
+          <Box sx={{ my: 2 }}>
+            <LinearProgress />
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              {getLoadingMessage()}
+            </Typography>
+          </Box>
+        )}
+        
+        {/* Show Signal error with retry option */}
+        {signalError && !signalLoading && (
+          <Alert 
+            severity="warning" 
+            sx={{ my: 2 }}
+            action={
+              <Button 
+                color="inherit" 
+                size="small" 
+                onClick={retrySignalInit}
+              >
+                Retry
+              </Button>
+            }
+          >
+            Encryption setup failed. You can still use the app, but messages won't be encrypted.
+          </Alert>
+        )}
+        
         <Divider sx={{ my: 2 }} />
         <DemoCredentials />
         <LoginForm />
@@ -53,6 +100,7 @@ const Login: NextPageWithLayout = () => {
           color="primary"
           fullWidth
           sx={{ mt: 2 }}
+          disabled={isLoading}
         >
           Create New Account
         </Button>
@@ -63,5 +111,4 @@ const Login: NextPageWithLayout = () => {
 
 // Set layout properties for this page
 Login.hideSidebars = true;
-
 export default Login;
