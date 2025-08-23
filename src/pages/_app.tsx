@@ -7,6 +7,8 @@ import { AuthProvider } from '../context/AuthContext';
 import { SocketProvider } from '../context/SocketContext';
 import Layout from '../components/layout/Layout';
 import { useRouter } from 'next/router';
+import { useContext } from 'react';
+import AuthContext from '../context/AuthContext';
 
 // Create a client
 const queryClient = new QueryClient();
@@ -16,8 +18,17 @@ const theme = createTheme({
   // Your theme settings...
 });
 
-function MyApp({ Component, pageProps }: AppProps) {
+
+
+
+// Inner component that has access to auth context
+function AppContent({ Component, pageProps }: AppProps) {
   const router = useRouter();
+  const authContext = useContext(AuthContext);
+  
+  // Extract user and token from your auth context
+  const userId = authContext.user?._id || null;  // Remove the user?.id fallback
+  const authToken = authContext.token || null;
   
   // Define paths that should have header hidden
   const noHeaderPaths = ['/login', '/register', '/forgot-password', '/reset-password'];
@@ -25,33 +36,39 @@ function MyApp({ Component, pageProps }: AppProps) {
   
   // Define paths that should have sidebars hidden
   const noSidebarPaths = [
-    '/login', 
-    '/register', 
-    '/forgot-password', 
-    '/reset-password', 
+    '/login',
+    '/register',
+    '/forgot-password',
+    '/reset-password',
     '/verify-email',
     '/friends',
     '/settings/profile',
-    '/aitoolbox'
+    '/aitoolbox',
   ];
-
+  
   // Check if current path starts with /profile/ to match dynamic routes
   const isProfilePage = router.pathname.startsWith('/profile/');
   
   // Hide sidebars if the path is in noSidebarPaths OR it's a profile page
   const hideSidebars = noSidebarPaths.includes(router.pathname) || isProfilePage;
+  
+  return (
+      <SocketProvider>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <Layout hideHeader={hideHeader} hideSidebars={hideSidebars}>
+            <Component {...pageProps} userId={userId} authToken={authToken} />
+          </Layout>
+        </ThemeProvider>
+      </SocketProvider>
+  );
+}
 
+function MyApp(props: AppProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <SocketProvider>
-          <ThemeProvider theme={theme}>
-            <CssBaseline />
-            <Layout hideHeader={hideHeader} hideSidebars={hideSidebars}>
-              <Component {...pageProps} />
-            </Layout>
-          </ThemeProvider>
-        </SocketProvider>
+        <AppContent {...props} />
       </AuthProvider>
     </QueryClientProvider>
   );

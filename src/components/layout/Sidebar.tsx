@@ -8,6 +8,7 @@ import {
   People as PeopleIcon,
   Bookmark as BookmarkIcon,
   Build as BuildIcon,
+  Chat as ChatIcon
 
 } from '@mui/icons-material';
 import Link from 'next/link';
@@ -72,6 +73,17 @@ const Sidebar = () => {
                   <BuildIcon />
                 </ListItemIcon>
                 <ListItemText primary="AI Toolbox" />
+              </ListItemButton>
+            </Link>
+          </ListItem>
+
+          <ListItem disablePadding>
+            <Link href="/chat" style={{ textDecoration: 'none', width: '100%', color: 'inherit' }}>
+              <ListItemButton sx={{ borderRadius: 1, mb: 1 }}>
+                <ListItemIcon>
+                  <ChatIcon />
+                </ListItemIcon>
+                <ListItemText primary="Chat" />
               </ListItemButton>
             </Link>
           </ListItem>
