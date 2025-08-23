@@ -34,6 +34,15 @@ import {
 } from '@mui/icons-material';
 import {getFullImageUrl} from '../../utils/imgUrl'; 
 
+interface FormattedUsers {
+  _id: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  profilePicture?: string;
+  isOnline?: boolean
+}
+
 interface User {
   id: string;
   username: string;
@@ -94,14 +103,14 @@ const NewChatDialog: React.FC<NewChatDialogProps> = ({ open, onClose, onCreateCo
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/users?limit=50', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_BASE_URL}/api/users?limit=50`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
       const data = await response.json();
       if (data.users) {
-        const formattedUsers = data.users.map((user: any) => ({
+        const formattedUsers = data.users.map((user: FormattedUsers) => ({
           id: user._id,
           username: user.username,
           firstName: user.firstName,
@@ -121,14 +130,14 @@ const NewChatDialog: React.FC<NewChatDialogProps> = ({ open, onClose, onCreateCo
   const searchUsers = async (query: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/users/search?q=${encodeURIComponent(query)}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_BASE_URL}api/users/search?q=${encodeURIComponent(query)}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
       const data = await response.json();
       if (data.users) {
-        const formattedUsers = data.users.map((user: any) => ({
+        const formattedUsers = data.users.map((user: FormattedUsers) => ({
           id: user._id,
           username: user.username,
           firstName: user.firstName,
