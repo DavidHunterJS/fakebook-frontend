@@ -8,26 +8,19 @@ import ChatLayout from '../../components/chat/ChatInterface';
 const ConversationPage = () => {
   const router = useRouter();
   const { conversationId } = router.query;
-<<<<<<< HEAD
   const { isAuthenticated, loading: authLoading } = useContext(AuthContext);
-=======
-  const { isAuthenticated } = useContext(AuthContext);
->>>>>>> release/1.5.8
   
   // This correctly results in a type of 'string | undefined'
   const conversationIdString = Array.isArray(conversationId)
     ? conversationId[0]
     : conversationId;
 
-<<<<<<< HEAD
   // Show loading while checking auth or initializing Signal
   if (authLoading) {
     return <div>Loading...</div>;
   }
 
   // Redirect to login if not authenticated
-=======
->>>>>>> release/1.5.8
   if (!isAuthenticated) {
     router.push('/login');
     return <div>Redirecting to login...</div>;
