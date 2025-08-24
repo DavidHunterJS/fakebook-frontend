@@ -11,7 +11,10 @@ const Login: NextPageWithLayout = () => {
   const { 
     isAuthenticated, 
     loading, 
+<<<<<<< HEAD
 
+=======
+>>>>>>> release/1.5.8
   } = useAuth();
   const router = useRouter();
 
@@ -64,7 +67,11 @@ const Login: NextPageWithLayout = () => {
             </Typography>
           </Box>
         )}
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> release/1.5.8
         <Divider sx={{ my: 2 }} />
         <DemoCredentials />
         <LoginForm />

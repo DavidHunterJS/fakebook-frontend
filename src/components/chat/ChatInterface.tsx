@@ -27,7 +27,7 @@ import {
   ListItemButton,
   Menu,
   MenuItem,
-  ListItemIcon
+  ListItemIcon,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -42,20 +42,13 @@ import {
   DoneAll as DoneAllIcon,
   TagFaces as TagFacesIcon,
   MoreVert as MoreVertIcon,
-  ExitToApp as ExitToAppIcon // Changed from DeleteIcon
+  ExitToApp as ExitToAppIcon,
 } from '@mui/icons-material';
 import NewChatDialog from './NewChatDialog';
 import { useSocket } from '../../context/SocketContext';
 import { getFullImageUrl } from '../../utils/imgUrl';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
-
-// ... (interfaces remain the same) ...
-// interface ChatInputProps {
-//   onSendMessage: (message: string) => void;
-//   onUploadFile: (file: File) => void;
-//   isUploading: boolean; 
-// }
 
 interface ChatLayoutProps {
   initialConversationId?: string;
@@ -89,7 +82,7 @@ interface Message {
     userId: string;
     readAt: string;
   }>;
-    metadata?: {
+  metadata?: {
     fileName?: string;
     fileSize?: number;
     mimeType?: string;
@@ -113,7 +106,6 @@ interface Conversation {
   unreadCount: number;
 }
 
-
 const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
   const theme = useTheme();
   const { socket, isConnected } = useSocket();
@@ -128,48 +120,102 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
-
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [reactionPickerAnchor, setReactionPickerAnchor] = useState<HTMLElement | null>(null);
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
 
-  // State for the conversation options menu
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedConversationForMenu, setSelectedConversationForMenu] = useState<Conversation | null>(null);
 
-  // ... (getAvatarUrl, useEffects, and other functions remain the same) ...
-  
   const getAvatarUrl = (conversation: Conversation): string | undefined => {
     if (!currentUser || conversation.type === 'group') {
       return undefined;
     }
-
-    const otherParticipant = conversation.participants?.find(
-      p => p.userId && p.userId._id !== currentUser._id
-    );
-
+    const otherParticipant = conversation.participants?.find(p => p.userId && p.userId._id !== currentUser._id);
     if (otherParticipant?.userId?.profilePicture) {
       return getFullImageUrl(otherParticipant.userId.profilePicture, 'profile');
     }
-
     return undefined;
   };
-  
-  useEffect(() => {
-    if (initialConversationId) {
-      console.log('Starting with conversation:', initialConversationId);
+
+  const loadMessages = useCallback(async (conversationId: string) => {
+    setLoadingMessages(true);
+    try {
+      const response = await fetch(`${backendUrl}/api/messages/${conversationId}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      });
+      const data = await response.json();
+      if (data.success) {
+        setMessages(data.messages);
+      } else {
+        console.error('Failed to load messages:', data.message);
+      }
+    } catch (error) {
+      console.error('Failed to load messages:', error);
+    } finally {
+      setLoadingMessages(false);
     }
-  }, [initialConversationId]);
+  }, []);
+
+  const selectConversation = useCallback((conversation: Conversation) => {
+    if (currentConversation?._id === conversation._id) return;
+    
+    if (socket && currentConversation) {
+      socket.emit('leaveConversation', { conversationId: currentConversation._id });
+    }
+    
+    setCurrentConversation(conversation);
+    setMessages([]);
+    setTypingUsers([]);
+    
+    if (socket) {
+      socket.emit('joinConversation', { conversationId: conversation._id });
+      loadMessages(conversation._id);
+      
+      if (conversation.unreadCount > 0) {
+        socket.emit('markConversationRead', { conversationId: conversation._id });
+        setConversations(prev => prev.map(c => 
+          c._id === conversation._id ? { ...c, unreadCount: 0 } : c
+        ));
+      }
+    }
+  }, [currentConversation, socket, loadMessages]);
+
+  useEffect(() => {
+    if (initialConversationId && conversations.length > 0) {
+      const initialConv = conversations.find(c => c._id === initialConversationId);
+      if (initialConv) {
+        selectConversation(initialConv);
+      }
+    }
+  }, [initialConversationId, conversations, selectConversation]);
+
+  const loadConversations = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${backendUrl}/api/conversations`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      });
+      const data = await response.json();
+      if (data.success) {
+        setConversations(data.conversations);
+      }
+    } catch (error) {
+      console.error('Failed to load conversations:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
         const response = await fetch(`${backendUrl}/api/auth/me`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         });
         const data = await response.json();
         if (data.success) {
@@ -181,10 +227,9 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
         console.error("Error fetching user profile:", error);
       }
     };
-
     fetchCurrentUser();
     loadConversations();
-  }, []);
+  }, [loadConversations]);
 
   const handleEmojiClick = (emojiData: EmojiClickData) => {
     if (socket && activeMessageId) {
@@ -203,25 +248,21 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
       if (index === -1) {
         return prev;
       }
-
       const updatedConv = {
         ...prev[index],
         lastMessage: {
-          content: message.messageType === 'text' 
-            ? message.content 
-            : (message.metadata?.fileName || 'File'),
+          content: message.messageType === 'text' ? message.content : (message.metadata?.fileName || 'File'),
           senderId: message.senderId._id,
-          sentAt: message.createdAt
-        }
+          sentAt: message.createdAt,
+        },
       };
-
       const newConversations = [...prev];
       newConversations.splice(index, 1);
       return [updatedConv, ...newConversations];
     });
   }, []);
 
-    useEffect(() => {
+  useEffect(() => {
     if (!socket) return;
 
     const handleNewMessage = (data: { message: Message }) => {
@@ -240,14 +281,13 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
     };
 
     const handleTyping = (data: { conversationId: string; isTyping: boolean; firstName: string; }) => {
-       if (data.conversationId === currentConversation?._id) {
-        if (data.isTyping) {
-          setTypingUsers(prev => [...prev.filter(u => u !== data.firstName), data.firstName]);
-        } else {
-          setTypingUsers(prev => prev.filter(u => u !== data.firstName));
-        }
+      if (data.conversationId === currentConversation?._id) {
+        setTypingUsers(prev => data.isTyping
+          ? [...prev.filter(u => u !== data.firstName), data.firstName]
+          : prev.filter(u => u !== data.firstName));
       }
     };
+
     const handleConversationRead = (data: { conversationId: string, userId: string }) => {
       if (data.conversationId === currentConversation?._id) {
         setMessages(prevMessages =>
@@ -255,7 +295,7 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
             if (!msg.readBy.some(r => r.userId === data.userId)) {
               return {
                 ...msg,
-                readBy: [...msg.readBy, { userId: data.userId, readAt: new Date().toISOString() }]
+                readBy: [...msg.readBy, { userId: data.userId, readAt: new Date().toISOString() }],
               };
             }
             return msg;
@@ -266,12 +306,7 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
 
     const handleReactionUpdate = (data: { messageId: string, reactions: Reaction[] }) => {
       setMessages(prev =>
-        prev.map(msg => {
-          if (msg._id === data.messageId) {
-            return { ...msg, reactions: data.reactions };
-          }
-          return msg;
-        })
+        prev.map(msg => msg._id === data.messageId ? { ...msg, reactions: data.reactions } : msg)
       );
     };
 
@@ -281,13 +316,16 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
     socket.on('conversationRead', handleConversationRead);
 
     return () => {
+      socket.off('reactionUpdated', handleReactionUpdate);
       socket.off('newChatMessage', handleNewMessage);
       socket.off('userChatTyping', handleTyping);
       socket.off('conversationRead', handleConversationRead);
-      socket.off('reactionUpdated', handleReactionUpdate);
     };
   }, [socket, currentUser, currentConversation, updateConversationLastMessage]);
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   useEffect(() => {
     scrollToBottom();
@@ -313,14 +351,12 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         body: formData,
       });
-
       const data = await response.json();
       if (!data.success) {
         throw new Error(data.message || 'File upload failed');
       }
       
       const messageType = data.metadata.mimeType.startsWith('image/') ? 'image' : 'file';
-
       const optimisticMessage: Message = {
         _id: `temp-${Date.now()}`,
         conversationId: currentConversation._id,
@@ -337,78 +373,24 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
         conversationId: currentConversation._id,
         content: data.url,
         messageType: messageType,
-        metadata: data.metadata
+        metadata: data.metadata,
       });
-
     } catch (error) {
-        console.error('Upload error:', error);
+      console.error('Upload error:', error);
     } finally {
-        setIsUploading(false);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-    }
-  };
-
-  const loadConversations = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${backendUrl}/api/conversations`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setConversations(data.conversations);
-      }
-    } catch (error) {
-      console.error('Failed to load conversations:', error);
-    } finally {
-      setLoading(false); 
-    }
-  };
-
-  const loadMessages = async (conversationId: string) => {
-    setLoadingMessages(true);
-    try {
-      const response = await fetch(`${backendUrl}/api/messages/${conversationId}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setMessages(data.messages);
-      } else {
-        console.error('Failed to load messages:', data.message);
-      }
-    } catch (error) {
-      console.error('Failed to load messages:', error);
-    } finally {
-      setLoadingMessages(false);
-    }
-  };
-
-  const selectConversation = (conversation: Conversation) => {
-    if (currentConversation?._id === conversation._id) return;
-    
-    if (socket && currentConversation) {
-      socket.emit('leaveConversation', { conversationId: currentConversation._id });
-    }
-    
-    setCurrentConversation(conversation);
-    setMessages([]);
-    setTypingUsers([]);
-    
-    if (socket) {
-      socket.emit('joinConversation', { conversationId: conversation._id });
-      loadMessages(conversation._id);
-      
-      if (conversation.unreadCount > 0) {
-        socket.emit('markConversationRead', { conversationId: conversation._id });
-        setConversations(prev => prev.map(c => 
-          c._id === conversation._id ? { ...c, unreadCount: 0 } : c
-        ));
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
     }
   };
+
+  const stopTyping = useCallback(() => {
+    if (isTyping && currentConversation && socket) {
+      setIsTyping(false);
+      socket.emit('chatTyping', { conversationId: currentConversation._id, isTyping: false });
+    }
+  }, [isTyping, currentConversation, socket]);
 
   const sendMessage = (text: string) => {
     if (!text.trim() || !currentConversation || !socket || !currentUser) return;
@@ -424,43 +406,30 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
     };
     setMessages(prev => [...prev, optimisticMessage]);
 
-    const messageData = {
+    socket.emit('sendChatMessage', {
       conversationId: currentConversation._id,
       content: text.trim(),
-      messageType: 'text'
-    };
-    socket.emit('sendChatMessage', messageData);
+      messageType: 'text',
+    });
 
     setMessageInput('');
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     stopTyping();
   };
 
-  // const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   setMessageInput(e.target.value);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMessageInput(e.target.value);
     
-  //   if (!isTyping && currentConversation && socket) {
-  //     setIsTyping(true);
-  //     socket.emit('chatTyping', { conversationId: currentConversation._id, isTyping: true });
-  //   }
-
-  //   if (typingTimeoutRef.current) {
-  //     clearTimeout(typingTimeoutRef.current);
-  //   }
-
-  //   typingTimeoutRef.current = setTimeout(() => {
-  //     stopTyping();
-  //   }, 1000);
-  // };
-
-  const stopTyping = () => {
-    if (isTyping && currentConversation && socket) {
-      setIsTyping(false);
-      socket.emit('chatTyping', { conversationId: currentConversation._id, isTyping: false });
+    if (!isTyping && currentConversation && socket) {
+      setIsTyping(true);
+      socket.emit('chatTyping', { conversationId: currentConversation._id, isTyping: true });
     }
-  };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(stopTyping, 1000);
   };
 
   const formatTime = (dateString: string) => {
@@ -473,11 +442,10 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
-        body: JSON.stringify({ type, participants, title })
+        body: JSON.stringify({ type, participants, title }),
       });
-      
       const data = await response.json();
       if (data.success) {
         setConversations(prev => [data.conversation, ...prev.filter(c => c._id !== data.conversation._id)]);
@@ -490,46 +458,39 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
     }
   };
   
-  // UPDATED: Function to handle leaving a conversation
   const handleLeaveConversation = async (conversationId: string) => {
     const conversation = conversations.find(c => c._id === conversationId);
     const isGroup = conversation?.type === 'group';
-
     const confirmMessage = isGroup
       ? 'Are you sure you want to leave this group?'
       : 'Are you sure you want to hide this conversation from your list?';
       
-    if (!window.confirm(confirmMessage)) {
-        return;
-    }
+    if (!window.confirm(confirmMessage)) return;
 
     try {
-        const response = await fetch(`${backendUrl}/api/conversations/${conversationId}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        const data = await response.json();
-        if (data.success) {
-            // Remove the conversation from the UI
-            setConversations(prev => prev.filter(c => c._id !== conversationId));
-            // If the conversation was active, clear the chat window
-            if (currentConversation?._id === conversationId) {
-                setCurrentConversation(null);
-                setMessages([]);
-            }
-        } else {
-            console.error('Failed to leave conversation:', data.message);
-            alert(`Failed to leave conversation: ${data.message}`);
+      const response = await fetch(`${backendUrl}/api/conversations/${conversationId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      });
+      const data = await response.json();
+      if (data.success) {
+        setConversations(prev => prev.filter(c => c._id !== conversationId));
+        if (currentConversation?._id === conversationId) {
+          setCurrentConversation(null);
+          setMessages([]);
         }
+      } else {
+        console.error('Failed to leave conversation:', data.message);
+        alert(`Failed to leave conversation: ${data.message}`);
+      }
     } catch (error) {
-        console.error('Error leaving conversation:', error);
-        alert('An error occurred while trying to leave the conversation.');
+      console.error('Error leaving conversation:', error);
+      alert('An error occurred while trying to leave the conversation.');
     }
   };
 
-  // Handlers for the options menu
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, conversation: Conversation) => {
-    event.stopPropagation(); // Prevents ListItemButton click
+    event.stopPropagation();
     setMenuAnchorEl(event.currentTarget);
     setSelectedConversationForMenu(conversation);
   };
@@ -539,119 +500,54 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
     setSelectedConversationForMenu(null);
   };
 
-
   const getConversationTitle = (conversation: Conversation) => {
     if (!currentUser) return 'Loading...';
-
     if (conversation.type === 'group') {
       return conversation.title || 'Group Chat';
     }
-    
-    const otherParticipant = conversation.participants?.find(
-      p => p.userId && p.userId._id !== currentUser._id
-    );
-    
-    if (otherParticipant?.userId) {
-      return `${otherParticipant.userId.firstName} ${otherParticipant.userId.lastName}`;
-    }
-    
-    return 'Direct Message';
+    const otherParticipant = conversation.participants?.find(p => p.userId && p.userId._id !== currentUser._id);
+    return otherParticipant?.userId ? `${otherParticipant.userId.firstName} ${otherParticipant.userId.lastName}` : 'Direct Message';
   };
 
   const getAvatarContent = (conversation: Conversation) => {
     if (!currentUser) return <PersonIcon />;
-    
     if (conversation.type === 'group') {
       return <GroupIcon />;
     }
-    
-    const otherParticipant = conversation.participants?.find(
-      p => p.userId && p.userId._id !== currentUser._id
-    );
-    
+    const otherParticipant = conversation.participants?.find(p => p.userId && p.userId._id !== currentUser._id);
     if (otherParticipant?.userId) {
       const { firstName, lastName } = otherParticipant.userId;
       return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
     }
-    
     return <PersonIcon />;
   };
   
   return (
     <Container maxWidth="xl" sx={{ height: '100vh', py: 2 }}>
-      <Paper
-        elevation={8}
-        sx={{
-          height: '100%',
-          display: 'flex',
-          borderRadius: 3,
-          overflow: 'hidden',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          p: 0.5
-        }}
-      >
+      <Paper elevation={8} sx={{ height: '100%', display: 'flex', borderRadius: 3, overflow: 'hidden', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', p: 0.5 }}>
         {/* Sidebar */}
-        <Paper
-          sx={{
-            width: 380,
-            display: 'flex',
-            flexDirection: 'column',
-            borderRadius: 2,
-            overflow: 'hidden'
-          }}
-        >
-          {/* Sidebar Header */}
-          <AppBar 
-            position="static" 
-            elevation={0}
-            sx={{
-              background: 'linear-gradient(135deg, #667eea, #764ba2)',
-              borderRadius: '8px 8px 0 0'
-            }}
-          >
+        <Paper sx={{ width: 380, display: 'flex', flexDirection: 'column', borderRadius: 2, overflow: 'hidden' }}>
+          <AppBar position="static" elevation={0} sx={{ background: 'linear-gradient(135deg, #667eea, #764ba2)', borderRadius: '8px 8px 0 0' }}>
             <Toolbar>
               <ChatIcon sx={{ mr: 2 }} />
               <Box sx={{ flexGrow: 1 }}>
-                <Typography variant="h6" component="div">
-                  Chat
-                </Typography>
+                <Typography variant="h6" component="div">Chat</Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <CircleIcon 
-                    sx={{ 
-                      fontSize: 8, 
-                      mr: 1, 
-                      color: isConnected ? '#4ade80' : '#ef4444' 
-                    }} 
-                  />
-                  <Typography variant="caption">
-                    {isConnected ? 'Connected' : 'Connecting...'}
-                  </Typography>
+                  <CircleIcon sx={{ fontSize: 8, mr: 1, color: isConnected ? '#4ade80' : '#ef4444' }} />
+                  <Typography variant="caption">{isConnected ? 'Connected' : 'Connecting...'}</Typography>
                 </Box>
               </Box>
               <Tooltip title="Start new chat">
-                <IconButton 
-                  color="inherit" 
-                  onClick={() => setShowNewChatDialog(true)}
-                  sx={{
-                    backgroundColor: 'rgba(255,255,255,0.2)',
-                    '&:hover': {
-                      backgroundColor: 'rgba(255,255,255,0.3)',
-                      transform: 'scale(1.05)'
-                    }
-                  }}
-                >
+                <IconButton color="inherit" onClick={() => setShowNewChatDialog(true)} sx={{ backgroundColor: 'rgba(255,255,255,0.2)', '&:hover': { backgroundColor: 'rgba(255,255,255,0.3)', transform: 'scale(1.05)' }}}>
                   <AddIcon />
                 </IconButton>
               </Tooltip>
             </Toolbar>
           </AppBar>
 
-          {/* Conversations List */}
           <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
             {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                <CircularProgress />
-              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>
             ) : (
               <List sx={{ p: 1 }}>
                 {conversations.map((conversation, index) => (
@@ -660,71 +556,30 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
                       <ListItemButton
                         onClick={() => selectConversation(conversation)}
                         selected={currentConversation?._id === conversation._id}
-                        sx={{
-                          borderRadius: 2,
-                          mb: 1,
-                          pr: 6, // Add padding to the right to make space for the button
-                          '&.Mui-selected': {
-                            background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                            color: 'white',
-                            '& .MuiListItemText-primary': { color: 'white' },
-                            '& .MuiListItemText-secondary': { color: 'rgba(255,255,255,0.7)' }
-                          },
-                          '&:hover': {
-                            backgroundColor: alpha(theme.palette.primary.main, 0.1)
-                          }
-                        }}
+                        sx={{ borderRadius: 2, mb: 1, pr: 6, '&.Mui-selected': { background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', '& .MuiListItemText-primary': { color: 'white' }, '& .MuiListItemText-secondary': { color: 'rgba(255,255,255,0.7)' }}, '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.1) } }}
                       >
                         <ListItemAvatar>
-                          <Badge 
-                            badgeContent={conversation.unreadCount} 
-                            color="error"
-                            invisible={conversation.unreadCount === 0}
-                          >
-                            <Avatar
-                              src={getAvatarUrl(conversation)}
-                              sx={{
-                                background: conversation.type === 'group' 
-                                  ? 'linear-gradient(135deg, #ff6b6b, #ee5a24)'
-                                  : 'linear-gradient(135deg, #4ecdc4, #44a08d)'
-                              }}
-                            >
+                          <Badge badgeContent={conversation.unreadCount} color="error" invisible={conversation.unreadCount === 0}>
+                            <Avatar src={getAvatarUrl(conversation)} sx={{ background: conversation.type === 'group' ? 'linear-gradient(135deg, #ff6b6b, #ee5a24)' : 'linear-gradient(135deg, #4ecdc4, #44a08d)' }}>
                               {getAvatarContent(conversation)}
                             </Avatar>
                           </Badge>
                         </ListItemAvatar>
                         <ListItemText
                           primary={getConversationTitle(conversation)}
-                          secondary={
-                            conversation.lastMessage?.content || 'No messages yet'
-                          }
+                          secondary={conversation.lastMessage?.content || 'No messages yet'}
                           primaryTypographyProps={{ fontWeight: 600 }}
-                          secondaryTypographyProps={{ 
-                            noWrap: true,
-                            sx: { maxWidth: 200 }
-                          }}
+                          secondaryTypographyProps={{ noWrap: true, sx: { maxWidth: 200 } }}
                         />
                       </ListItemButton>
                       <Tooltip title="More options">
                         <IconButton
-                            className="conversation-menu-button"
-                            size="small"
-                            onClick={(e) => handleMenuOpen(e, conversation)}
-                            sx={{
-                                position: 'absolute',
-                                right: 8,
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                opacity: 0,
-                                transition: 'opacity 0.2s',
-                                color: currentConversation?._id === conversation._id ? 'white' : 'text.secondary',
-                                backgroundColor: 'action.hover',
-                                '&:hover': {
-                                    backgroundColor: 'action.selected',
-                                },
-                            }}
+                          className="conversation-menu-button"
+                          size="small"
+                          onClick={(e) => handleMenuOpen(e, conversation)}
+                          sx={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', opacity: 0, transition: 'opacity 0.2s', color: currentConversation?._id === conversation._id ? 'white' : 'text.secondary', backgroundColor: 'action.hover', '&:hover': { backgroundColor: 'action.selected' } }}
                         >
-                            <MoreVertIcon fontSize="small" />
+                          <MoreVertIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     </Box>
@@ -735,93 +590,36 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
           </Box>
         </Paper>
 
-        {/* Chat Area (No changes here) */}
-        {/* ... */}
-        <Paper
-          sx={{
-            flexGrow: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            borderRadius: 2,
-            ml: 0.5,
-            overflow: 'hidden'
-          }}
-        >
-          {/* Chat Header */}
-          <AppBar 
-            position="static" 
-            elevation={0}
-            color="inherit"
-            sx={{
-              borderRadius: '8px 8px 0 0',
-              background: alpha(theme.palette.grey[100], 0.8),
-              backdropFilter: 'blur(10px)'
-            }}
-          >
+        {/* Chat Area */}
+        <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', borderRadius: 2, ml: 0.5, overflow: 'hidden' }}>
+          <AppBar position="static" elevation={0} color="inherit" sx={{ borderRadius: '8px 8px 0 0', background: alpha(theme.palette.grey[100], 0.8), backdropFilter: 'blur(10px)' }}>
             <Toolbar>
               {currentConversation ? (
                 <>
-                  <Avatar 
-                    sx={{ mr: 2 }}
-                    src={getAvatarUrl(currentConversation)} 
-                  >
-                    {getAvatarContent(currentConversation)}
-                  </Avatar>
+                  <Avatar sx={{ mr: 2 }} src={getAvatarUrl(currentConversation)}>{getAvatarContent(currentConversation)}</Avatar>
                   <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="h6" color="text.primary">
-                      {getConversationTitle(currentConversation)}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {currentConversation.participants.length} participants
-                    </Typography>
+                    <Typography variant="h6" color="text.primary">{getConversationTitle(currentConversation)}</Typography>
+                    <Typography variant="caption" color="text.secondary">{currentConversation.participants.length} participants</Typography>
                   </Box>
                 </>
               ) : (
                 <Box sx={{ flexGrow: 1 }}>
-                  <Typography variant="h6" color="text.primary">
-                    Select a conversation
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Choose a chat to start messaging
-                  </Typography>
+                  <Typography variant="h6" color="text.primary">Select a conversation</Typography>
+                  <Typography variant="caption" color="text.secondary">Choose a chat to start messaging</Typography>
                 </Box>
               )}
             </Toolbar>
           </AppBar>
 
-          {/* Messages Area */}
-          <Box
-            sx={{
-              flexGrow: 1,
-              overflow: 'auto',
-              p: 2,
-              background: `linear-gradient(180deg, 
-                ${alpha(theme.palette.background.paper, 0.9)} 0%, 
-                ${alpha(theme.palette.grey[50], 0.9)} 100%)`
-            }}
-          >
+          <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2, background: `linear-gradient(180deg, ${alpha(theme.palette.background.paper, 0.9)} 0%, ${alpha(theme.palette.grey[50], 0.9)} 100%)` }}>
             {loadingMessages ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                <CircularProgress />
-              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>
             ) : !currentConversation ? (
-              <Box
-                sx={{
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  textAlign: 'center'
-                }}
-              >
+              <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
                 <Box>
                   <ChatIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                  <Typography variant="h4" gutterBottom>
-                    Welcome to Trippy.lol Chat! 🚀
-                  </Typography>
-                  <Typography variant="body1" color="text.secondary">
-                    Select a conversation from the sidebar to start chatting
-                  </Typography>
+                  <Typography variant="h4" gutterBottom>Welcome to Trippy.lol Chat! 🚀</Typography>
+                  <Typography variant="body1" color="text.secondary">Select a conversation from the sidebar to start chatting</Typography>
                 </Box>
               </Box>
             ) : (
@@ -830,31 +628,8 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
                   const isCurrentUser = message.senderId?._id === currentUser?._id;
 
                   const messageContent = () => {
-                    if (message.messageType === 'image') {
-                      return (
-                        <Box
-                          component="img"
-                          src={message.content}
-                          alt={message.metadata?.fileName || 'User upload'}
-                          sx={{ maxWidth: '100%', maxHeight: '300px', objectFit: 'cover', borderRadius: '12px', cursor: 'pointer' }}
-                          onClick={() => window.open(message.content, '_blank')}
-                        />
-                      );
-                    }
-                    if (message.messageType === 'file') {
-                      return (
-                        <Button
-                          variant="outlined"
-                          startIcon={<DescriptionIcon />}
-                          href={message.content}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          sx={{ textTransform: 'none', fontWeight: 600 }}
-                        >
-                          {message.metadata?.fileName || 'Download File'}
-                        </Button>
-                      );
-                    }
+                    if (message.messageType === 'image') return <Box component="img" src={message.content} alt={message.metadata?.fileName || 'User upload'} sx={{ maxWidth: '100%', maxHeight: '300px', objectFit: 'cover', borderRadius: '12px', cursor: 'pointer' }} onClick={() => window.open(message.content, '_blank')} />;
+                    if (message.messageType === 'file') return <Button variant="outlined" startIcon={<DescriptionIcon />} href={message.content} target="_blank" rel="noopener noreferrer" sx={{ textTransform: 'none', fontWeight: 600 }}>{message.metadata?.fileName || 'Download File'}</Button>;
                     return <Typography variant="body1">{message.content}</Typography>;
                   };
 
@@ -863,84 +638,27 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
                     const otherParticipant = currentConversation?.participants.find(p => p.userId._id !== currentUser?._id);
                     if (!otherParticipant) return <DoneIcon sx={{ fontSize: 16, ml: 0.5, opacity: 0.7 }} />;
                     const isRead = message.readBy.some(r => r.userId === otherParticipant.userId._id);
-                    if (isRead) return <DoneAllIcon sx={{ fontSize: 16, ml: 0.5, color: '#64b5f6' }} />;
-                    return <DoneIcon sx={{ fontSize: 16, ml: 0.5, opacity: 0.7 }} />;
+                    return isRead ? <DoneAllIcon sx={{ fontSize: 16, ml: 0.5, color: '#64b5f6' }} /> : <DoneIcon sx={{ fontSize: 16, ml: 0.5, opacity: 0.7 }} />;
                   };
 
                   const RenderReactions = () => {
-                    if (!message.reactions || message.reactions.length === 0) return null;
-
+                    if (!message.reactions?.length) return null;
                     const reactionGroups = message.reactions.reduce((acc, reaction) => {
                       acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
                       return acc;
                     }, {} as Record<string, number>);
-
                     return (
-                      <Box 
-                        sx={{
-                          display: 'flex', 
-                          gap: 0.75,
-                          flexWrap: 'wrap',
-                          mt: 0.75,
-                          justifyContent: isCurrentUser ? 'flex-end' : 'flex-start',
-                        }}
-                      >
+                      <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 0.75, justifyContent: isCurrentUser ? 'flex-end' : 'flex-start' }}>
                         {Object.entries(reactionGroups).map(([emoji, count]) => {
-                          const userHasReacted = message.reactions?.some(
-                            r => r.userId === currentUser?._id && r.emoji === emoji
-                          );
-                          
+                          const userHasReacted = message.reactions?.some(r => r.userId === currentUser?._id && r.emoji === emoji);
                           return (
                             <Chip
                               key={emoji}
-                              label={
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height:'20px' }}>
-                                  <span style={{ fontSize: '16px' }}>{emoji}</span>
-                                  <span style={{ fontSize: '13px', fontWeight: 600 }}>{count}</span>
-                                </Box>
-                              }
+                              label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '20px' }}><span style={{ fontSize: '16px' }}>{emoji}</span><span style={{ fontSize: '13px', fontWeight: 600 }}>{count}</span></Box>}
                               size="medium"
                               variant={userHasReacted ? "filled" : "outlined"}
-                              onClick={() => {
-                                if (socket && message._id) {
-                                  socket.emit('toggleReaction', { messageId: message._id, emoji });
-                                }
-                              }}
-                              sx={{
-                                cursor: 'pointer',
-                                height: 32,
-                                minWidth: 48,
-                                fontSize: '0.875rem',
-                                backgroundColor: userHasReacted 
-                                  ? 'rgba(102, 126, 234, 0.15)' 
-                                  : 'background.paper',
-                                color: userHasReacted 
-                                  ? 'primary.main' 
-                                  : 'text.primary',
-                                border: '1.5px solid',
-                                borderColor: userHasReacted 
-                                  ? 'primary.main' 
-                                  : 'divider',
-                                '&:hover': {
-                                  backgroundColor: userHasReacted 
-                                    ? 'rgba(102, 126, 234, 0.25)' 
-                                    : 'action.hover',
-                                  transform: 'scale(1.05)',
-                                  borderColor: 'primary.main',
-                                },
-                                transition: 'all 0.2s ease',
-                                '& .MuiChip-label': { 
-                                  paddingTop: '12px !important',
-                                  paddingBottom: '8px !important',
-                                  paddingLeft: '7px !important',
-                                  paddingRight: '0px !important',
-                                  fontSize: '0.875rem',
-                                  lineHeight: 1,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  height: '100%',
-                                }
-                              }}
+                              onClick={() => socket?.emit('toggleReaction', { messageId: message._id, emoji })}
+                              sx={{ cursor: 'pointer', height: 32, minWidth: 48, backgroundColor: userHasReacted ? 'rgba(102, 126, 234, 0.15)' : 'background.paper', color: userHasReacted ? 'primary.main' : 'text.primary', border: '1.5px solid', borderColor: userHasReacted ? 'primary.main' : 'divider', '&:hover': { backgroundColor: userHasReacted ? 'rgba(102, 126, 234, 0.25)' : 'action.hover', transform: 'scale(1.05)', borderColor: 'primary.main' }, transition: 'all 0.2s ease', '& .MuiChip-label': { paddingTop: '12px !important', paddingBottom: '8px !important', paddingLeft: '7px !important', paddingRight: '0px !important', fontSize: '0.875rem', lineHeight: 1, display: 'flex', alignItems: 'center', height: '100%' } }}
                             />
                           );
                         })}
@@ -950,83 +668,20 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
 
                   return (
                     <Fade key={message._id} in={true} timeout={300 + index * 50}>
-                      <Box 
-                        sx={{ 
-                          mb: 2,
-                          display: 'flex', 
-                          flexDirection: 'column',
-                          alignItems: isCurrentUser ? 'flex-end' : 'flex-start'
-                        }}
-                      >
-                        <Box
-                          className="message-wrapper"
-                          sx={{
-                            position: 'relative',
-                            maxWidth: '60%',
-                            '&:hover .reaction-button': {
-                              opacity: 1
-                            }
-                          }}
-                        >
+                      <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', alignItems: isCurrentUser ? 'flex-end' : 'flex-start' }}>
+                        <Box className="message-wrapper" sx={{ position: 'relative', maxWidth: '60%', '&:hover .reaction-button': { opacity: 1 } }}>
                           <IconButton
                             className="reaction-button"
                             size="small"
-                            onClick={(e) => {
-                              setReactionPickerAnchor(e.currentTarget);
-                              setActiveMessageId(message._id);
-                            }}
-                            sx={{
-                              position: 'absolute',
-                              top: -4,
-                              right: isCurrentUser ? -4 : 'auto',
-                              left: isCurrentUser ? 'auto' : -4,
-                              zIndex: 10,
-                              width: 28,
-                              height: 28,
-                              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                              backdropFilter: 'blur(4px)',
-                              border: '1px solid',
-                              borderColor: 'divider',
-                              opacity: 0,
-                              transition: 'all 0.2s ease',
-                              '&:hover': { 
-                                backgroundColor: 'rgba(255, 255, 255, 1)',
-                                transform: 'scale(1.1)',
-                                boxShadow: 2
-                              }
-                            }}
+                            onClick={(e) => { setReactionPickerAnchor(e.currentTarget); setActiveMessageId(message._id); }}
+                            sx={{ position: 'absolute', top: -4, right: isCurrentUser ? -4 : 'auto', left: isCurrentUser ? 'auto' : -4, zIndex: 10, width: 28, height: 28, backgroundColor: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(4px)', border: '1px solid', borderColor: 'divider', opacity: 0, transition: 'all 0.2s ease', '&:hover': { backgroundColor: 'rgba(255, 255, 255, 1)', transform: 'scale(1.1)', boxShadow: 2 } }}
                           >
                             <TagFacesIcon sx={{ fontSize: 16 }} />
                           </IconButton>
-                          <Paper 
-                            elevation={1}
-                            sx={{
-                              p: message.messageType === 'image' ? 0.5 : 2,
-                              borderRadius: 3,
-                              ...(isCurrentUser
-                                ? { 
-                                    background: 'linear-gradient(135deg, #667eea, #764ba2)', 
-                                    color: 'white', 
-                                    borderBottomRightRadius: 8 
-                                  }
-                                : { 
-                                    backgroundColor: theme.palette.grey[100], 
-                                    borderBottomLeftRadius: 8 
-                                  })
-                            }}
-                          >
+                          <Paper elevation={1} sx={{ p: message.messageType === 'image' ? 0.5 : 2, borderRadius: 3, ...(isCurrentUser ? { background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', borderBottomRightRadius: 8 } : { backgroundColor: theme.palette.grey[100], borderBottomLeftRadius: 8 }) }}>
                             {messageContent()}
-                          
-                            <Box sx={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', 
-                              mt: message.messageType === 'text' ? 0.5 : 0,
-                              p: message.messageType === 'image' ? '4px 8px' : 0 
-                            }}>
-                              <Typography variant="caption" sx={{ opacity: 0.7, fontSize: '0.7rem' }}>
-                                {formatTime(message.createdAt)}
-                              </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: isCurrentUser ? 'flex-end' : 'flex-start', mt: message.messageType === 'text' ? 0.5 : 0, p: message.messageType === 'image' ? '4px 8px' : 0 }}>
+                              <Typography variant="caption" sx={{ opacity: 0.7, fontSize: '0.7rem' }}>{formatTime(message.createdAt)}</Typography>
                               <ReadReceipt />
                             </Box>
                           </Paper>
@@ -1035,28 +690,14 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
                       </Box>
                     </Fade>
                   );
-                })} 
-
+                })}
                 {typingUsers.length > 0 && (
                   <Fade in>
                     <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 2 }}>
-                      <Chip
-                        label={`${typingUsers.join(', ')} ${typingUsers.length === 1 ? 'is' : 'are'} typing...`}
-                        variant="outlined"
-                        size="small"
-                        sx={{ 
-                          fontStyle: 'italic',
-                          animation: 'pulse 1.5s ease-in-out infinite',
-                          '@keyframes pulse': {
-                            '0%, 100%': { opacity: 0.6 },
-                            '50%': { opacity: 1 }
-                          }
-                        }}
-                      />
+                      <Chip label={`${typingUsers.join(', ')} ${typingUsers.length === 1 ? 'is' : 'are'} typing...`} variant="outlined" size="small" sx={{ fontStyle: 'italic', animation: 'pulse 1.5s ease-in-out infinite', '@keyframes pulse': { '0%, 100%': { opacity: 0.6 }, '50%': { opacity: 1 } } }} />
                     </Box>
                   </Fade>
                 )}
-
                 <div ref={messagesEndRef} />
               </>
             )}
@@ -1064,153 +705,50 @@ const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
 
           {/* Input Area */}
           <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-            <Box
-              component="form"
-              onSubmit={(e) => { e.preventDefault(); sendMessage(messageInput); }}
-              sx={{ display: 'flex', gap: 1, alignItems: 'center' }}
-            >
-            <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileSelect}
-                  style={{ display: 'none' }}
-                />
-                <Tooltip title="Attach file">
-                  <span>
-                    <IconButton onClick={() => fileInputRef.current?.click()} disabled={!currentConversation || isUploading}>
-                      {isUploading ? <CircularProgress size={24} /> : <AttachFileIcon />}
-                    </IconButton>
-                  </span>
-                </Tooltip>
-                <TextField
-                  fullWidth
-                  multiline
-                  maxRows={4}
-                  value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
-                  placeholder="Type your message..."
-                  disabled={!currentConversation || !currentUser || isUploading}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage(messageInput);
-                    }
-                  }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 3,
-                      backgroundColor: alpha(theme.palette.background.paper, 0.8),
-                      backdropFilter: 'blur(10px)'
-                    }
-                  }}
-                />
-                <Tooltip title="Send message">
-                  <span>
-                    <IconButton
-                      type="submit"
-                      disabled={!currentConversation || !messageInput.trim() || isUploading}
-                      sx={{
-                        background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                        color: 'white',
-                        '&:hover': { background: 'linear-gradient(135deg, #5a67d8, #6b46c1)' },
-                        '&:disabled': { background: theme.palette.grey[300] },
-                        transition: 'all 0.3s ease'
-                      }}
-                    >
-                      <SendIcon />
-                    </IconButton>
-                  </span>
-                </Tooltip>
+            <Box component="form" onSubmit={(e) => { e.preventDefault(); sendMessage(messageInput); }} sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <input type="file" ref={fileInputRef} onChange={handleFileSelect} style={{ display: 'none' }} />
+              <Tooltip title="Attach file">
+                <span>
+                  <IconButton onClick={() => fileInputRef.current?.click()} disabled={!currentConversation || isUploading}>
+                    {isUploading ? <CircularProgress size={24} /> : <AttachFileIcon />}
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <TextField
+                fullWidth
+                multiline
+                maxRows={4}
+                value={messageInput}
+                onChange={handleInputChange}
+                placeholder="Type your message..."
+                disabled={!currentConversation || !currentUser || isUploading}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(messageInput); }}}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3, backgroundColor: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(10px)' }}}
+              />
+              <Tooltip title="Send message">
+                <span>
+                  <IconButton type="submit" disabled={!currentConversation || !messageInput.trim() || isUploading} sx={{ background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', '&:hover': { background: 'linear-gradient(135deg, #5a67d8, #6b46c1)' }, '&:disabled': { background: theme.palette.grey[300] }, transition: 'all 0.3s ease' }}>
+                    <SendIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
             </Box>
           </Box>
         </Paper>
       </Paper>
-      <NewChatDialog
-        open={showNewChatDialog}
-        onClose={() => setShowNewChatDialog(false)}
-        onCreateConversation={handleCreateConversation}
-      />
-      <Popover
-        open={Boolean(reactionPickerAnchor) && Boolean(activeMessageId)}
-        anchorEl={reactionPickerAnchor}
-        onClose={() => {
-          setReactionPickerAnchor(null);
-          setActiveMessageId(null);
-        }}
-        anchorOrigin={{ 
-          vertical: 'top', 
-          horizontal: 'center' 
-        }}
-        transformOrigin={{ 
-          vertical: 'bottom', 
-          horizontal: 'center' 
-        }}
-        slotProps={{
-          paper: {
-            sx: {
-              boxShadow: 4,
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'divider',
-              overflow: 'visible',
-              mt: -1
-            }
-          }
-        }}
-        disableScrollLock
-        disableRestoreFocus
-        disableEnforceFocus
-      >
-        <Box sx={{ 
-          p: 1,
-          backgroundColor: 'background.paper',
-          borderRadius: 2
-        }}>
-          <EmojiPicker 
-            onEmojiClick={handleEmojiClick}
-            width={300}
-            height={400}
-            searchDisabled={false}
-            skinTonesDisabled={true}
-            previewConfig={{
-              showPreview: false
-            }}
-          />
+      <NewChatDialog open={showNewChatDialog} onClose={() => setShowNewChatDialog(false)} onCreateConversation={handleCreateConversation} />
+      <Popover open={Boolean(reactionPickerAnchor)} anchorEl={reactionPickerAnchor} onClose={() => { setReactionPickerAnchor(null); setActiveMessageId(null); }} anchorOrigin={{ vertical: 'top', horizontal: 'center' }} transformOrigin={{ vertical: 'bottom', horizontal: 'center' }} slotProps={{ paper: { sx: { boxShadow: 4, borderRadius: 2, border: '1px solid', borderColor: 'divider', overflow: 'visible', mt: -1 }}}} disableScrollLock disableRestoreFocus disableEnforceFocus>
+        <Box sx={{ p: 1, backgroundColor: 'background.paper', borderRadius: 2 }}>
+          <EmojiPicker onEmojiClick={handleEmojiClick} width={300} height={400} searchDisabled={false} skinTonesDisabled={true} previewConfig={{ showPreview: false }} />
         </Box>
-      </Popover>  
-
-      {/* UPDATED: Conversation options menu */}
-      <Menu
-        anchorEl={menuAnchorEl}
-        open={Boolean(menuAnchorEl)}
-        onClose={handleMenuClose}
-        PaperProps={{
-            elevation: 2,
-            sx: {
-                overflow: 'visible',
-                filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
-                mt: 1.5,
-            },
-        }}
-        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-      >
-        <MenuItem
-          onClick={() => {
-            if (selectedConversationForMenu) {
-              handleLeaveConversation(selectedConversationForMenu._id); // Updated function call
-            }
-            handleMenuClose();
-          }}
-        >
-          <ListItemIcon>
-            <ExitToAppIcon fontSize="small" /> {/* Updated Icon */}
-          </ListItemIcon>
-          <ListItemText primary="Leave Chat" /> {/* Updated Text */}
+      </Popover>
+      <Menu anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={handleMenuClose} PaperProps={{ elevation: 2, sx: { overflow: 'visible', filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))', mt: 1.5 }}} transformOrigin={{ horizontal: 'right', vertical: 'top' }} anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}>
+        <MenuItem onClick={() => { if (selectedConversationForMenu) { handleLeaveConversation(selectedConversationForMenu._id); } handleMenuClose(); }}>
+          <ListItemIcon><ExitToAppIcon fontSize="small" /></ListItemIcon>
+          <ListItemText primary="Leave Chat" />
         </MenuItem>
       </Menu>
     </Container>
-    
   );
 };
 
