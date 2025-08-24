@@ -48,11 +48,22 @@ import NewChatDialog from './NewChatDialog';
 import { useSocket } from '../../context/SocketContext';
 import { getFullImageUrl } from '../../utils/imgUrl';
 
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
+
 // ... (interfaces remain the same) ...
-interface ChatInputProps {
-  onSendMessage: (message: string) => void;
-  onUploadFile: (file: File) => void;
-  isUploading: boolean; 
+// interface ChatInputProps {
+//   onSendMessage: (message: string) => void;
+//   onUploadFile: (file: File) => void;
+//   isUploading: boolean; 
+// }
+
+interface ChatLayoutProps {
+  initialConversationId?: string;
+}
+
+interface Reaction {
+  emoji: string;
+  userId: string;
 }
 
 interface User {
@@ -103,7 +114,7 @@ interface Conversation {
 }
 
 
-const ChatInterface: React.FC = () => {
+const ChatInterface = ({ initialConversationId }: ChatLayoutProps) => {
   const theme = useTheme();
   const { socket, isConnected } = useSocket();
 
@@ -122,7 +133,6 @@ const ChatInterface: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout>(null);
 
   const [reactionPickerAnchor, setReactionPickerAnchor] = useState<HTMLElement | null>(null);
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
@@ -148,11 +158,17 @@ const ChatInterface: React.FC = () => {
 
     return undefined;
   };
+  
+  useEffect(() => {
+    if (initialConversationId) {
+      console.log('Starting with conversation:', initialConversationId);
+    }
+  }, [initialConversationId]);
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/auth/me', {
+        const response = await fetch(`${backendUrl}/api/auth/me`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
         const data = await response.json();
@@ -248,7 +264,7 @@ const ChatInterface: React.FC = () => {
       }
     };
 
-    const handleReactionUpdate = (data: { messageId: string, reactions: any[] }) => {
+    const handleReactionUpdate = (data: { messageId: string, reactions: Reaction[] }) => {
       setMessages(prev =>
         prev.map(msg => {
           if (msg._id === data.messageId) {
@@ -292,7 +308,7 @@ const ChatInterface: React.FC = () => {
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://localhost:5000/api/chat/upload', {
+      const response = await fetch(`${backendUrl}/api/chat/upload`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         body: formData,
@@ -337,7 +353,7 @@ const ChatInterface: React.FC = () => {
   const loadConversations = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/conversations', {
+      const response = await fetch(`${backendUrl}/api/conversations`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       const data = await response.json();
@@ -354,7 +370,7 @@ const ChatInterface: React.FC = () => {
   const loadMessages = async (conversationId: string) => {
     setLoadingMessages(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/messages/${conversationId}`, {
+      const response = await fetch(`${backendUrl}/api/messages/${conversationId}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       const data = await response.json();
@@ -419,22 +435,22 @@ const ChatInterface: React.FC = () => {
     stopTyping();
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setMessageInput(e.target.value);
+  // const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   setMessageInput(e.target.value);
     
-    if (!isTyping && currentConversation && socket) {
-      setIsTyping(true);
-      socket.emit('chatTyping', { conversationId: currentConversation._id, isTyping: true });
-    }
+  //   if (!isTyping && currentConversation && socket) {
+  //     setIsTyping(true);
+  //     socket.emit('chatTyping', { conversationId: currentConversation._id, isTyping: true });
+  //   }
 
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+  //   if (typingTimeoutRef.current) {
+  //     clearTimeout(typingTimeoutRef.current);
+  //   }
 
-    typingTimeoutRef.current = setTimeout(() => {
-      stopTyping();
-    }, 1000);
-  };
+  //   typingTimeoutRef.current = setTimeout(() => {
+  //     stopTyping();
+  //   }, 1000);
+  // };
 
   const stopTyping = () => {
     if (isTyping && currentConversation && socket) {
@@ -453,7 +469,7 @@ const ChatInterface: React.FC = () => {
 
   const handleCreateConversation = async (type: 'direct' | 'group', participants: string[], title?: string) => {
     try {
-      const response = await fetch('http://localhost:5000/api/conversations', {
+      const response = await fetch(`${backendUrl}/api/conversations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -488,7 +504,7 @@ const ChatInterface: React.FC = () => {
     }
 
     try {
-        const response = await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
+        const response = await fetch(`${backendUrl}/api/conversations/${conversationId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });

@@ -1,14 +1,12 @@
 import React, { useContext } from 'react';
 import { useRouter } from 'next/router';
 import AuthContext from '../../context/AuthContext';
-import { useSignalProtocol } from '../../context/SignalContext';
 import ChatLayout from '../../components/chat/ChatInterface';
 
 const ConversationPage = () => {
   const router = useRouter();
   const { conversationId } = router.query;
   const { isAuthenticated, loading: authLoading } = useContext(AuthContext);
-  const { isInitialized, isLoading: signalLoading } = useSignalProtocol();
   
   // Convert router query to string
   const conversationIdString = Array.isArray(conversationId)
@@ -16,7 +14,7 @@ const ConversationPage = () => {
     : conversationId;
 
   // Show loading while checking auth or initializing Signal
-  if (authLoading || signalLoading) {
+  if (authLoading) {
     return <div>Loading...</div>;
   }
 
@@ -28,7 +26,7 @@ const ConversationPage = () => {
 
   return (
     <ChatLayout 
-      {...({ initialConversationId: conversationIdString } as any)}
+      initialConversationId={conversationIdString}
     />
   );
 };

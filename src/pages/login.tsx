@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { Box, Typography, Paper, Divider, Button, LinearProgress, Alert } from '@mui/material';
+import { Box, Typography, Paper, Divider, Button, LinearProgress } from '@mui/material';
 import useAuth from '../hooks/useAuth';
 import LoginForm from '../components/auth/LoginForm';
 import { NextPageWithLayout } from '../types/next';
@@ -11,10 +11,7 @@ const Login: NextPageWithLayout = () => {
   const { 
     isAuthenticated, 
     loading, 
-    signalInitialized, 
-    signalLoading, 
-    signalError,
-    retrySignalInit 
+
   } = useAuth();
   const router = useRouter();
 
@@ -27,12 +24,10 @@ const Login: NextPageWithLayout = () => {
   // Determine current loading state
   const getLoadingMessage = () => {
     if (loading) return '🔐 Signing you in...';
-    if (signalLoading) return '🔒 Setting up encryption...';
-    if (signalInitialized) return '✅ Ready!';
     return '';
   };
 
-  const isLoading = loading || signalLoading;
+  const isLoading = loading;
 
   return (
     <Box
@@ -68,25 +63,6 @@ const Login: NextPageWithLayout = () => {
               {getLoadingMessage()}
             </Typography>
           </Box>
-        )}
-        
-        {/* Show Signal error with retry option */}
-        {signalError && !signalLoading && (
-          <Alert 
-            severity="warning" 
-            sx={{ my: 2 }}
-            action={
-              <Button 
-                color="inherit" 
-                size="small" 
-                onClick={retrySignalInit}
-              >
-                Retry
-              </Button>
-            }
-          >
-            Encryption setup failed. You can still use the app, but messages won't be encrypted.
-          </Alert>
         )}
         
         <Divider sx={{ my: 2 }} />
