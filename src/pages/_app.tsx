@@ -31,7 +31,7 @@ function AppContent({ Component, pageProps }: AppProps) {
   const authToken = authContext.token || null;
   
   // Define paths that should have header hidden
-  const noHeaderPaths = ['/login', '/register', '/forgot-password', '/reset-password'];
+  const noHeaderPaths = ['/login', '/register', '/forgot-password', '/reset-password','/welcome'];
   const hideHeader = noHeaderPaths.includes(router.pathname);
   
   // Define paths that should have sidebars hidden
@@ -44,6 +44,7 @@ function AppContent({ Component, pageProps }: AppProps) {
     '/friends',
     '/settings/profile',
     '/aitoolbox',
+    '/workflows'
   ];
   
   // Check if current path starts with /profile/ to match dynamic routes

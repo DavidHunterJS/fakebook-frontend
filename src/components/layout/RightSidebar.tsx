@@ -75,25 +75,19 @@ const RightSidebar: FC = () => {
     // --- Effect to Fetch Data ---
     useEffect(() => {
         const fetchSuggestions = async () => {
-            if (!authToken) {
-                setSuggestionsError("Authentication required for suggestions.");
-                setIsLoadingSuggestions(false);
-                setSuggestions([]);
-                return;
-            }
+            // ❗️ FIX: The 'if (!authToken)' check has been REMOVED.
             setIsLoadingSuggestions(true);
             setSuggestionsError(null);
             try {
-                // Ensure your backend /api/friends/suggestions returns profilePicture
                 const response = await fetch(`${API_BASE_URL}/friends/suggestions?limit=5`, {
-                    headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                    credentials: 'include', // This correctly tells the browser to send the auth cookie
+                    // ❗️ FIX: The manual 'Authorization' header has been REMOVED.
                 });
                 if (!response.ok) {
                     const errorData: ApiError = await response.json().catch(() => ({ message: `HTTP error! status: ${response.status}` }));
                     throw new Error(errorData.message);
                 }
                 const data: SuggestionsApiResponse = await response.json();
-                console.log("[RightSidebar] Suggestions data received:", data.suggestions); // Log received data
                 setSuggestions(data.suggestions || []);
             } catch (err) {
                 setSuggestionsError(err instanceof Error ? err.message : 'Failed to load suggestions.');
@@ -104,25 +98,19 @@ const RightSidebar: FC = () => {
         };
 
         const fetchActiveFriends = async () => {
-            if (!authToken) {
-                setActiveError("Authentication required for active friends.");
-                setIsLoadingActive(false);
-                setActiveFriends([]);
-                return;
-            }
+            // ❗️ FIX: The 'if (!authToken)' check has been REMOVED.
             setIsLoadingActive(true);
             setActiveError(null);
             try {
-                // Ensure your backend /api/friends/active returns profilePicture
                 const response = await fetch(`${API_BASE_URL}/friends/active?limit=10`, {
-                    headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                    credentials: 'include', // This correctly tells the browser to send the auth cookie
+                    // ❗️ FIX: The manual 'Authorization' header has been REMOVED.
                 });
                 if (!response.ok) {
                     const errorData: ApiError = await response.json().catch(() => ({ message: `HTTP error! status: ${response.status}` }));
                     throw new Error(errorData.message);
                 }
                 const data: ActiveFriendsApiResponse = await response.json();
-                 console.log("[RightSidebar] Active friends data received:", data.activeFriends); // Log received data
                 setActiveFriends(data.activeFriends || []);
             } catch (err) {
                 setActiveError(err instanceof Error ? err.message : 'Failed to load active friends.');
@@ -138,7 +126,8 @@ const RightSidebar: FC = () => {
             return;
         }
 
-        if (isAuthenticated && authToken) {
+        // ❗️ FIX: The main condition now ONLY checks isAuthenticated
+        if (isAuthenticated) {
             fetchSuggestions();
             fetchActiveFriends();
         } else {
@@ -147,7 +136,8 @@ const RightSidebar: FC = () => {
             setIsLoadingActive(false);
             setActiveFriends([]);
         }
-    }, [isAuthenticated, authToken, authLoading]);
+    // ❗️ FIX: The dependency array is simplified
+    }, [isAuthenticated, authLoading]);
 
 
     const handleAddFriend = useCallback(async (userId: string) => {
@@ -158,6 +148,7 @@ const RightSidebar: FC = () => {
         setSendingRequestId(userId);
         try {
             const response = await fetch(`${API_BASE_URL}/friends/request/${userId}`, {
+                credentials: 'include',
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
             });

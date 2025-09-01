@@ -1,7 +1,7 @@
-// src/contexts/SocketContext.tsx
+// src/context/SocketContext.tsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import useAuth from '../hooks/useAuth';
+import useAuth from '../hooks/useAuth'; // Assuming useAuth provides isAuthenticated
 
 type SocketContextType = {
   socket: Socket | null;
@@ -18,47 +18,40 @@ export const useSocket = () => useContext(SocketContext);
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const { token } = useAuth();
+  // Get the isAuthenticated status from your auth hook
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
-    // Only try to connect if we have a token
-    if (token) {
-      // Use the environment variable for the URL
+    if (isAuthenticated) {
       const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL!, {
-        auth: { token },
-        withCredentials: true,
+        withCredentials: true,  
       });
 
       setSocket(newSocket);
 
       const onConnect = () => {
-        console.log('Socket connected');
+        console.log('✅ Socket connected successfully using session cookie.');
         setIsConnected(true);
       };
 
       const onDisconnect = () => {
-        console.log('Socket disconnected');
+        console.log('Socket disconnected.');
         setIsConnected(false);
       };
 
       newSocket.on('connect', onConnect);
       newSocket.on('disconnect', onDisconnect);
 
-      // Cleanup function to run when the component unmounts or token changes
       return () => {
         newSocket.off('connect', onConnect);
         newSocket.off('disconnect', onDisconnect);
         newSocket.disconnect();
-        setSocket(null);
-        setIsConnected(false);
       };
     }
-  }, [token]); // Effect depends only on the token
+  // ❗️ Change the dependency array
+  }, [isAuthenticated]);
 
-  const value = {
-    socket,
-    isConnected,
-  };
+  const value = { socket, isConnected };
 
   return (
     <SocketContext.Provider value={value}>

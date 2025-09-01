@@ -11,7 +11,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      router.push('/login');
+      router.push('/welcome');
     }
   }, [isAuthenticated, loading, router]);
 

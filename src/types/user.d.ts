@@ -18,4 +18,7 @@ export interface User {
   role?: string;
   isActive?: boolean;
   friends?: User[];
+  googleId?: string;
+  authProvider: 'local' | 'google';
+  isOAuthUser: boolean;
 }

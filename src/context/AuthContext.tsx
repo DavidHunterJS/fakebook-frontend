@@ -1,10 +1,10 @@
 // src/context/AuthContext.tsx
 import React, { createContext, useReducer, useEffect, ReactNode, FC } from 'react';
 import { isAxiosError } from 'axios';
-import axiosInstance from '../utils/api'; // Assuming your axios instance is in utils/api
-import { User } from '../types/user'; // Adjust path as needed
+import axiosInstance from '../utils/api';
+import { User } from '../types/user';
 
-// Helper function to normalize user data (ensure it's consistent)
+// Helper function to normalize user data
 const normalizeUser = (userData: User | Partial<User> | Record<string, unknown> | null): User | null => {
   if (!userData) return null;
 
@@ -31,26 +31,27 @@ interface AuthState {
   token: string | null;
   loading: boolean;
   error: string | null;
+  authMethod: 'token' | 'session' | null; // Track authentication method
 }
 
 type AuthAction =
     { type: 'LOADING' } 
   | { type: 'LOGIN_SUCCESS'; payload: { user: User | Record<string, unknown>; token: string } }
   | { type: 'REGISTER_SUCCESS'; payload: { user: User | Record<string, unknown>; token: string } }
-  | { type: 'USER_LOADED'; payload: { user: User | Record<string, unknown>; token: string } }
+  | { type: 'USER_LOADED'; payload: { user: User | Record<string, unknown>; token?: string; authMethod?: 'token' | 'session' } }
   | { type: 'AUTH_ERROR'; payload?: string }
   | { type: 'LOGIN_FAIL'; payload: string }
   | { type: 'REGISTER_FAIL'; payload: string }
   | { type: 'LOGOUT' }
   | { type: 'PROFILE_UPDATED'; payload: { user: Partial<User> } };
 
-// ✅ FIXED: Added authToken to the context type definition.
 interface AuthContextType extends AuthState {
   authToken: string | null;
   login: (email: string, password: string) => Promise<User>;
   register: (firstName:string, lastName:string, username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   updateUserInContext: (updatedUserData: Partial<User>) => void;
+  refetchUser: () => Promise<void>; // Add method to refetch user
 }
 
 const initialState: AuthState = {
@@ -59,15 +60,17 @@ const initialState: AuthState = {
   token: null,
   loading: true,
   error: null,
+  authMethod: null,
 };
 
 const AuthContext = createContext<AuthContextType>({
   ...initialState,
-  authToken: null, // Add to initial context value
+  authToken: null,
   login: async () => Promise.reject(new Error('Login function not yet initialized.')),
   register: async () => {},
   logout: () => {},
   updateUserInContext: () => {},
+  refetchUser: async () => {},
 });
 
 const authReducer = (state: AuthState, action: AuthAction): AuthState => {
@@ -79,7 +82,8 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
         ...state,
         isAuthenticated: true,
         user: normalizeUser(action.payload.user),
-        token: action.payload.token,
+        token: action.payload.token || null,
+        authMethod: action.payload.authMethod || (action.payload.token ? 'token' : 'session'),
         loading: false,
         error: null,
       };
@@ -93,6 +97,7 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
         isAuthenticated: true,
         user: normalizeUser(action.payload.user),
         token: action.payload.token,
+        authMethod: 'token',
         loading: false,
         error: null,
       };
@@ -122,37 +127,69 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
 export const AuthProvider: FC<{children: ReactNode}> = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  useEffect(() => {
-    const loadUser = async () => {
-      if (typeof window === 'undefined') {
-        dispatch({ type: 'AUTH_ERROR', payload: 'Cannot load user on server.' });
-        return;
-      }
-      
-      const token = localStorage.getItem('token');
-      if (!token) {
-        dispatch({ type: 'AUTH_ERROR' });
-        return;
-      }
 
+  const loadUser = async () => {
+    if (typeof window === 'undefined') {
+      dispatch({ type: 'AUTH_ERROR', payload: 'Cannot load user on server.' });
+      return;
+    }    
+    // 1. Prioritize token-based authentication
+    const token = localStorage.getItem('token');
+
+    console.log("Found Token in localStorage:", token);
+    
+    if (token) {
       axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
+      console.log("Axios header set:", axiosInstance.defaults.headers.common['Authorization']);
+
       try {
-        const res = await axiosInstance.get('/auth/me');        
+        // Use a single, consistent endpoint for fetching the user
+        const tokenResponse = await axiosInstance.get('/auth/current'); 
+        
+        if (tokenResponse.data && (tokenResponse.data.user || tokenResponse.data)) {
+          dispatch({
+            type: 'USER_LOADED',
+            payload: { 
+              user: tokenResponse.data.user || tokenResponse.data,
+              token: token,
+              authMethod: 'token'
+            },
+          });
+          return; // Success, stop here
+        }
+      } catch (tokenError) {
+        console.log('Token auth failed, cleaning up and checking for session...' + tokenError);
+        localStorage.removeItem('token'); // The token is invalid, remove it
+        delete axiosInstance.defaults.headers.common['Authorization'];
+      }
+    }
+
+    // 2. If no token, THEN try to load user from a session (for OAuth)
+    try {
+      const sessionResponse = await axiosInstance.get('/auth/current', {
+        withCredentials: true,
+      });
+      
+      if (sessionResponse.data && sessionResponse.data.user) {
         dispatch({
           type: 'USER_LOADED',
           payload: { 
-            user: res.data.user || res.data,
-            token: token
+            user: sessionResponse.data.user,
+            authMethod: 'session'
           },
         });
-      } catch (err: unknown) {
-        console.error('Error loading user in AuthProvider:', err);
-        delete axiosInstance.defaults.headers.common['Authorization'];
-        dispatch({ type: 'AUTH_ERROR', payload: 'Failed to load user session.' });
+        return; // Success, stop here
       }
-    };
+    } catch (sessionError) {
+      console.log('Session auth also failed.'+sessionError);
+    }
 
+    // 3. If both methods fail, the user is not authenticated.
+    dispatch({ type: 'AUTH_ERROR' });
+  };
+
+  useEffect(() => {
     loadUser();
   }, []);
 
@@ -166,9 +203,20 @@ export const AuthProvider: FC<{children: ReactNode}> = ({ children }) => {
     return 'An unexpected error occurred';
   };
 
-  const login = async (email: string, password: string) => {
+const login = async (email: string, password: string) => {
     dispatch({ type: 'LOADING' });
     try {
+      // ❗️ **ADD THIS:** First, clear any existing server-side session.
+      // This sends the connect.sid cookie to the server to be invalidated.
+      try {
+        await axiosInstance.get('/auth/logout', { withCredentials: true });
+      } catch (e) {
+        // Don't worry if this fails (e.g., if there was no session).
+        // The main goal is to clear a session if it exists.
+        console.log("Pre-login logout call did not find an active session, which is okay."+e);
+      }
+
+      // Now, proceed with the JWT login as before.
       const res = await axiosInstance.post('/auth/login', { email, password });
       
       if (typeof window !== 'undefined') {
@@ -204,25 +252,38 @@ export const AuthProvider: FC<{children: ReactNode}> = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    // ❗️ **CHANGE THIS:** Always attempt to log out of the server-side session.
+    try {
+      // This will clear the `connect.sid` cookie.
+      await axiosInstance.get('/auth/logout', { withCredentials: true });
+    } catch (error) {
+      console.error('Session logout failed, proceeding with client-side cleanup:', error);
+    }
+    
+    // Always clear the token from Axios headers and localStorage.
     delete axiosInstance.defaults.headers.common['Authorization'];
-    dispatch({ type: 'LOGOUT' });
+    dispatch({ type: 'LOGOUT' }); // This reducer already removes the token from localStorage.
   };
 
   const updateUserInContext = (updatedUserData: Partial<User>) => {
     dispatch({ type: 'PROFILE_UPDATED', payload: { user: updatedUserData } });
   };
 
+  const refetchUser = async () => {
+    await loadUser();
+  };
+
   return (
     <AuthContext.Provider
       value={{
         ...state,
-        // ✅ FIXED: Map the `token` from state to `authToken` for consumers.
         authToken: state.token,
         login,
         register,
         logout,
         updateUserInContext,
+        refetchUser,
       }}
     >
       {children}
