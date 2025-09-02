@@ -99,13 +99,16 @@ const PostList: React.FC = () => {
 
 // Helper function to normalize raw API post data into the strict 'Post' interface
 const normalizePost = (rawPost: ApiRawPost): Post => {
+  // --- FIX: Add the missing properties `authProvider` and `isOAuth` ---
   const defaultUser: User = {
     _id: 'unknown_id',
     username: 'Unknown User',
     email: 'unknown@example.com',
     firstName: 'Unknown',
     lastName: 'User',
-    profilePicture: 'default-avatar.png'
+    profilePicture: 'default-avatar.png',
+    authProvider: 'local', // Default value for the authentication provider
+    isOAuthUser: false         // Default value for the OAuth status
   };
 
   const apiUser = rawPost.user || rawPost.author;
@@ -232,18 +235,16 @@ const normalizePost = (rawPost: ApiRawPost): Post => {
     } as IReportReason;
   }) || [];
 
-  // --- FIX: Normalize the new reactionsSummary field ---
   const reactionsSummaryValue: ReactionSummary = rawPost.reactionsSummary 
     ? {
         counts: rawPost.reactionsSummary.counts || {},
         currentUserReaction: rawPost.reactionsSummary.currentUserReaction || null
       }
-    : { // Fallback if the whole summary object is missing from the API response
+    : {
         counts: {},
         currentUserReaction: null
       };
 
-  // Return the normalized Post object, matching the updated Post type
   return {
     _id: rawPost._id || `temp_${Math.random()}`,
     text: rawPost.text || '',
@@ -259,7 +260,6 @@ const normalizePost = (rawPost: ApiRawPost): Post => {
     reportReasons: reportReasonsValue,
     commentsCount: rawPost.commentsCount || 0,
     isSaved: rawPost.isSaved || false,
-    // --- FIX: Use the new reactionsSummary instead of the old fields ---
     reactionsSummary: reactionsSummaryValue,
   };
 };
