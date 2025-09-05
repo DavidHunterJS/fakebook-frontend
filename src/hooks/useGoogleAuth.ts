@@ -1,19 +1,19 @@
 import { useState, useCallback } from 'react';
 
-interface GoogleAuthResponse {
-  access_token: string;
-  id_token: string;
-  scope: string;
-  token_type: string;
-  expires_in: number;
-}
+// interface GoogleAuthResponse {
+//   access_token: string;
+//   id_token: string;
+//   scope: string;
+//   token_type: string;
+//   expires_in: number;
+// }
 
 export const useGoogleAuth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
+  // const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
 
   const loginWithGoogle = useCallback(() => {
     if (!GOOGLE_CLIENT_ID) {
