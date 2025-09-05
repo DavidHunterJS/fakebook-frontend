@@ -12,7 +12,7 @@ export const useGoogleAuth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
   // const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
 
   const loginWithGoogle = useCallback(() => {
