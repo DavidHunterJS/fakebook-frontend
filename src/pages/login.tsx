@@ -4,55 +4,86 @@ import { Box, Typography, Paper, Divider, Button, LinearProgress } from '@mui/ma
 import { isAxiosError } from 'axios';
 
 type LoginFormProps = {
-  onLogin: (email: string, password: string) => void; // 'onLogin' is a function
-  error: string;                                    // 'error' is a string
+  onLogin: (email: string, password: string) => void;
+  error: string;
 };
 
 const apiUrl = `${process.env.NEXT_PUBLIC_BACKEND_BASE_URL}`;
+
+// Add Google OAuth hook
+const useGoogleAuth = () => {
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState('');
+
+  const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
+  const loginWithGoogle = () => {
+    if (!GOOGLE_CLIENT_ID) {
+      setGoogleError('Google Client ID not configured');
+      return;
+    }
+
+    setIsGoogleLoading(true);
+    setGoogleError('');
+
+    // Create Google OAuth URL
+    const params = new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      redirect_uri: `${window.location.origin}/auth/callback`,
+      response_type: 'code',
+      scope: 'openid email profile',
+      access_type: 'offline',
+      prompt: 'consent',
+      state: Math.random().toString(36).substring(7)
+    });
+
+    const googleAuthUrl = `https://accounts.google.com/oauth/authorize?${params.toString()}`;
+    
+    // Redirect to Google
+    window.location.href = googleAuthUrl;
+  };
+
+  return {
+    loginWithGoogle,
+    isGoogleLoading,
+    googleError
+  };
+};
 
 const useAuth = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // This is now an async function that performs a real API call
   const login = async (email: string, password: string) => {
     setLoading(true);
     setError('');
     console.log(`Attempting login with: ${email}`);
 
     try {
-      // Make the network request to your backend's login endpoint
       const response = await fetch(`${apiUrl}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
-        // This is CRITICAL for sending the session cookie
         credentials: 'include',
       });
 
       const data = await response.json();
 
-      // Check if the server responded with an error status (e.g., 401 Unauthorized)
       if (!response.ok) {
         throw new Error(data.message || 'Login failed. Please check your credentials.');
       }
 
-      // If the request was successful, update the state
       setIsAuthenticated(true);
 
-    } catch (err: unknown) { // 👈 2. Change type from 'any' to 'unknown'
+    } catch (err: unknown) {
       let errorMessage = 'An unexpected error occurred.';
 
-      // 3. Check for different error types
       if (isAxiosError(err)) {
-        // This is an error from an axios request
-        // Safely access the server's specific error message if it exists
         errorMessage = err.response?.data?.message || err.message;
       } else if (err instanceof Error) {
-        // This is a standard JavaScript error
         errorMessage = err.message;
       }
 
@@ -71,7 +102,7 @@ const LoginForm = ({ onLogin, error }: LoginFormProps) => {
   const [password, setPassword] = useState('');
 
   const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault(); // Correctly placed here to prevent page reload
+    event.preventDefault();
     if (!email || !password) {
       alert("Please enter both email and password.");
       return;
@@ -124,6 +155,13 @@ const Login = () => {
     login,
   } = useAuth();
 
+  // Add Google OAuth hook
+  const {
+    loginWithGoogle,
+    isGoogleLoading,
+    googleError
+  } = useGoogleAuth();
+
   useEffect(() => {
     if (isAuthenticated) {
       window.location.href = '/dashboard'; 
@@ -132,12 +170,18 @@ const Login = () => {
 
   const getLoadingMessage = () => {
     if (loading) return '🔐 Verifying credentials...';
+    if (isGoogleLoading) return '🔄 Redirecting to Google...';
     return '';
   };
 
+  // Update the Google login handler
   const handleGoogleLogin = () => {
-    window.location.href = 'https://fakebook-backend-a2a77a290552.herokuapp.com/api/auth/google';;
+    loginWithGoogle();
   };
+
+  // Show any Google-specific errors
+  const displayError = error || googleError;
+  const isAnyLoading = loading || isGoogleLoading;
 
   return (
     <Box
@@ -168,7 +212,7 @@ const Login = () => {
           Connect with friends and the world around you
         </Typography>
         
-        {loading && (
+        {isAnyLoading && (
           <Box sx={{ my: 2 }}>
             <LinearProgress />
             <Typography variant="body2" sx={{ mt: 1 }}>
@@ -179,8 +223,8 @@ const Login = () => {
         
         <Divider sx={{ my: 2 }} />
         
-        {/* Pass the login function and error state to the form */}
-        <LoginForm onLogin={login} error={error} />
+        {/* Pass the combined error to the form */}
+        <LoginForm onLogin={login} error={displayError} />
         
         <Divider sx={{ my: 2 }}>OR</Divider>
 
@@ -188,7 +232,7 @@ const Login = () => {
           variant="outlined"
           fullWidth
           onClick={handleGoogleLogin}
-          disabled={loading}
+          disabled={isAnyLoading}
           startIcon={<FcGoogle size={18} />}
           sx={{ 
             mt: 1, 
@@ -202,7 +246,7 @@ const Login = () => {
             },
           }}
         >
-          Sign in with Google
+          {isGoogleLoading ? 'Connecting to Google...' : 'Sign in with Google'}
         </Button>
         
         <Divider sx={{ my: 2 }} />
@@ -214,7 +258,7 @@ const Login = () => {
           color="primary"
           fullWidth
           sx={{ mt: 2 }}
-          disabled={loading}
+          disabled={isAnyLoading}
           onClick={(e) => e.preventDefault()}
         >
           Create New Account
