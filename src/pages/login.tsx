@@ -136,7 +136,7 @@ const Login = () => {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = `${apiUrl}/api/auth/google`;
+    window.location.href = 'https://fakebook-backend-a2a77a290552.herokuapp.com/api/auth/google';;
   };
 
   return (
