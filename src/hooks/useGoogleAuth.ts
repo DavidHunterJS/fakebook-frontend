@@ -12,10 +12,14 @@ export const useGoogleAuth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+  const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   // const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
 
   const loginWithGoogle = useCallback(() => {
+
+    console.log('🔍 Step 1: Button clicked');
+    console.log('🔍 GOOGLE_CLIENT_ID:', process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
+
     if (!GOOGLE_CLIENT_ID) {
       setError('Google Client ID not configured');
       return;
@@ -36,7 +40,9 @@ export const useGoogleAuth = () => {
     });
 
     const googleAuthUrl = `https://accounts.google.com/oauth/authorize?${params.toString()}`;
-    
+    console.log('🔍 Step 2: Redirecting to:', googleAuthUrl);
+
+
     // Redirect to Google
     window.location.href = googleAuthUrl;
   }, [GOOGLE_CLIENT_ID]);

@@ -12,6 +12,10 @@ const AuthCallback = () => {
     const handleCallback = async () => {
       const { code, error, state } = router.query;
 
+      console.log('🔍 Step 3: Callback page loaded');
+      console.log('🔍 URL params:', router.query);
+      console.log('🔍 Auth code received:', !!code);  
+
       if (error) {
         console.error('OAuth error:', error);
         setStatus('error');
@@ -74,6 +78,7 @@ const AuthCallback = () => {
     if (router.isReady) {
       handleCallback();
     }
+    console.log('🔍 Step 4: Sending code to backend...');
   }, [router]);
 
   return (
