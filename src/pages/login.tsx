@@ -66,7 +66,7 @@ const MagicLinkForm = () => {
         disabled={loading}
         sx={{ mt: 1, mb: 1 }}
       >
-        {loading ? 'Sending...' : 'Send Magic Link'}
+        {loading ? 'Sending...' : 'Send Email Link'}
       </Button>
     </Box>
   );
@@ -117,10 +117,10 @@ const LoginPage = () => {
         }}
       >
         <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
-          Welcome to Trippy.lol
+          Welcome to ComplianceKit
         </Typography>
         <Typography variant="body1" color="textSecondary" gutterBottom>
-          Sign-in or create an account with a magic link
+          Sign-in or create an account with an email link
         </Typography>
         
         {loading && <LinearProgress sx={{ my: 2 }} />}
