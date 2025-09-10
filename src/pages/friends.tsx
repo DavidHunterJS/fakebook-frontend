@@ -427,7 +427,7 @@ const FriendsPage: React.FC = () => {
                 <CardContent sx={{ flexGrow: 1, pt: 0 }}>
                   <Typography variant="body2" color="text.secondary">
                     {friend.bio || 'No bio available'}
-                  </Typography>
+                  </Typography>``
                 </CardContent>
 
                 <CardActions>
