@@ -1,9 +1,9 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Box, Typography, Paper, Divider, Button, LinearProgress, TextField, Alert, CircularProgress } from '@mui/material';
-import AuthContext from '../context/AuthContext'; // Adjust path to your AuthContext
+import AuthContext from '../context/AuthContext'
 
-// --- Child Components for Forms ---
+// --- Child Component for Magic Link Form ---
 
 const MagicLinkForm = () => {
   const { loginWithMagicLink, loading, error } = useContext(AuthContext);
@@ -30,11 +30,11 @@ const MagicLinkForm = () => {
     }
   };
 
-  if (isSuccess) {
+  if (isSuccess && !error) {
     return (
       <Box sx={{ textAlign: 'center', py: 3 }}>
         <Typography variant="h6" color="success.main" sx={{ mb: 2 }}>
-          ✅ Email Link Sent!
+          ✅ Magic Link Sent!
         </Typography>
         <Typography variant="body2" color="textSecondary">
           Check your email for a secure login link. It will expire in 15 minutes.
@@ -66,14 +66,14 @@ const MagicLinkForm = () => {
         disabled={loading}
         sx={{ mt: 1, mb: 1 }}
       >
-        {loading ? 'Sending...' : 'Send Email Link'}
+        {loading ? 'Sending...' : 'Send Magic Link'}
       </Button>
     </Box>
   );
 };
 
 
-// --- Main Login Component ---
+// --- Main Login Page Component ---
 
 const LoginPage = () => {
   const { isAuthenticated, loading } = useContext(AuthContext);
@@ -86,7 +86,7 @@ const LoginPage = () => {
     }
   }, [isAuthenticated, router]);
   
-  // Don't render anything if we're authenticated and about to redirect
+  // Display a loading spinner while checking auth status or redirecting
   if (isAuthenticated) {
     return (
        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
@@ -117,27 +117,22 @@ const LoginPage = () => {
         }}
       >
         <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
-          Welcome to ComplinceKit
+          Welcome to Trippy.lol
         </Typography>
         <Typography variant="body1" color="textSecondary" gutterBottom>
-          Placeholder
+          Sign-in or create an account with a magic link
         </Typography>
         
         {loading && <LinearProgress sx={{ my: 2 }} />}
         
         <Divider sx={{ my: 2 }} />
         
-        <Typography variant="h6" sx={{ mb: 2 }}>Sign In</Typography>
-        
-        {/* For now, we only have Magic Link, so no toggle is needed.
-            If you add back password login, you can re-add the toggle here. */}
-        
         <MagicLinkForm />
         
-
       </Paper>
     </Box>
   );
 };
 
 export default LoginPage;
+
