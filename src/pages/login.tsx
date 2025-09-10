@@ -1,187 +1,99 @@
-import React, { useEffect, useState } from 'react';
-import { FcGoogle } from 'react-icons/fc';
-import { Box, Typography, Paper, Divider, Button, LinearProgress } from '@mui/material';
-import { isAxiosError } from 'axios';
+import React, { useState, useContext, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import { Box, Typography, Paper, Divider, Button, LinearProgress, TextField, Alert, CircularProgress } from '@mui/material';
+import AuthContext from '../context/AuthContext'; // Adjust path to your AuthContext
 
-type LoginFormProps = {
-  onLogin: (email: string, password: string) => void;
-  error: string;
-};
+// --- Child Components for Forms ---
 
-const apiUrl = `${process.env.NEXT_PUBLIC_BACKEND_BASE_URL}`;
-
-// Add Google OAuth hook
-const useGoogleAuth = () => {
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [googleError, setGoogleError] = useState('');
-
-  const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-
-  const loginWithGoogle = () => {
-    if (!GOOGLE_CLIENT_ID) {
-      setGoogleError('Google Client ID not configured');
-      return;
-    }
-
-    setIsGoogleLoading(true);
-    setGoogleError('');
-
-    // Create Google OAuth URL
-    const params = new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: `${window.location.origin}/auth/callback`,
-      response_type: 'code',
-      scope: 'openid email profile',
-      access_type: 'offline',
-      prompt: 'consent',
-      state: Math.random().toString(36).substring(7)
-    });
-
-    const googleAuthUrl = `https://accounts.google.com/oauth/authorize?${params.toString()}`;
-    
-    // Redirect to Google
-    window.location.href = googleAuthUrl;
-  };
-
-  return {
-    loginWithGoogle,
-    isGoogleLoading,
-    googleError
-  };
-};
-
-const useAuth = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const login = async (email: string, password: string) => {
-    setLoading(true);
-    setError('');
-    console.log(`Attempting login with: ${email}`);
-
-    try {
-      const response = await fetch(`${apiUrl}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-        credentials: 'include',
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Login failed. Please check your credentials.');
-      }
-
-      setIsAuthenticated(true);
-
-    } catch (err: unknown) {
-      let errorMessage = 'An unexpected error occurred.';
-
-      if (isAxiosError(err)) {
-        errorMessage = err.response?.data?.message || err.message;
-      } else if (err instanceof Error) {
-        errorMessage = err.message;
-      }
-
-      console.error('Login failed:', errorMessage);
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return { isAuthenticated, loading, error, login };
-};
-
-const LoginForm = ({ onLogin, error }: LoginFormProps) => {
+const MagicLinkForm = () => {
+  const { loginWithMagicLink, loading, error } = useContext(AuthContext);
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [validationError, setValidationError] = useState('');
+  const [isSuccess, setIsSuccess] = useState(false);
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!email || !password) {
-      alert("Please enter both email and password.");
+    if (!email) {
+      setValidationError('Please enter your email address.');
       return;
     }
-    onLogin(email, password);
+    setValidationError('');
+    setIsSuccess(false);
+    
+    try {
+      await loginWithMagicLink(email);
+      setIsSuccess(true); // Show success message on successful API call
+    } catch (e) {
+      // The context will already be setting its own error state, 
+      // which we display below. No need to set it again here.
+      console.error(e);
+    }
   };
+
+  if (isSuccess) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 3 }}>
+        <Typography variant="h6" color="success.main" sx={{ mb: 2 }}>
+          ✅ Email Link Sent!
+        </Typography>
+        <Typography variant="body2" color="textSecondary">
+          Check your email for a secure login link. It will expire in 15 minutes.
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box component="form" noValidate onSubmit={handleSubmit} sx={{ mt: 1 }}>
-      <input
+      <TextField
         type="email"
-        placeholder="Email Address"
+        label="Email Address"
         required
+        fullWidth
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        style={{ width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+        sx={{ mb: 2 }}
+        variant="outlined"
+        error={!!validationError}
+        helperText={validationError}
+        disabled={loading}
       />
-      <input
-        type="password"
-        placeholder="Password"
-        required
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        style={{ width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-      />
-      {error && (
-        <Typography color="error" variant="body2" sx={{ mb: 1 }}>
-          {error}
-        </Typography>
-      )}
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       <Button
         type="submit"
         fullWidth
         variant="contained"
+        disabled={loading}
         sx={{ mt: 1, mb: 1 }}
       >
-        Sign In
+        {loading ? 'Sending...' : 'Send Email Link'}
       </Button>
     </Box>
   );
 };
 
+
 // --- Main Login Component ---
 
-const Login = () => {
-  const { 
-    isAuthenticated, 
-    loading, 
-    error,
-    login,
-  } = useAuth();
+const LoginPage = () => {
+  const { isAuthenticated, loading } = useContext(AuthContext);
+  const router = useRouter();
 
-  // Add Google OAuth hook
-  const {
-    loginWithGoogle,
-    isGoogleLoading,
-    googleError
-  } = useGoogleAuth();
-
+  // Redirect if user is already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      window.location.href = '/dashboard'; 
+      router.push('/dashboard');
     }
-  }, [isAuthenticated]);
-
-  const getLoadingMessage = () => {
-    if (loading) return '🔐 Verifying credentials...';
-    if (isGoogleLoading) return '🔄 Redirecting to Google...';
-    return '';
-  };
-
-  // Update the Google login handler
-  const handleGoogleLogin = () => {
-    loginWithGoogle();
-  };
-
-  // Show any Google-specific errors
-  const displayError = error || googleError;
-  const isAnyLoading = loading || isGoogleLoading;
+  }, [isAuthenticated, router]);
+  
+  // Don't render anything if we're authenticated and about to redirect
+  if (isAuthenticated) {
+    return (
+       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+         <CircularProgress />
+       </Box>
+    );
+  }
 
   return (
     <Box
@@ -192,7 +104,6 @@ const Login = () => {
         justifyContent: 'center',
         minHeight: '100vh',
         background: '#f0f2f5',
-        fontFamily: 'sans-serif',
       }}
     >
       <Paper
@@ -206,66 +117,27 @@ const Login = () => {
         }}
       >
         <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
-          Welcome to Trippy.lol
+          Welcome to ComplinceKit
         </Typography>
         <Typography variant="body1" color="textSecondary" gutterBottom>
-          Connect with friends and the world around you
+          Placeholder
         </Typography>
         
-        {isAnyLoading && (
-          <Box sx={{ my: 2 }}>
-            <LinearProgress />
-            <Typography variant="body2" sx={{ mt: 1 }}>
-              {getLoadingMessage()}
-            </Typography>
-          </Box>
-        )}
+        {loading && <LinearProgress sx={{ my: 2 }} />}
         
         <Divider sx={{ my: 2 }} />
         
-        {/* Pass the combined error to the form */}
-        <LoginForm onLogin={login} error={displayError} />
+        <Typography variant="h6" sx={{ mb: 2 }}>Sign In</Typography>
         
-        <Divider sx={{ my: 2 }}>OR</Divider>
-
-        <Button
-          variant="outlined"
-          fullWidth
-          onClick={handleGoogleLogin}
-          disabled={isAnyLoading}
-          startIcon={<FcGoogle size={18} />}
-          sx={{ 
-            mt: 1, 
-            mb: 2,
-            textTransform: 'none',
-            borderColor: '#dadce0',
-            color: '#3c4043',
-            '&:hover': {
-              backgroundColor: '#f6f9fe',
-              borderColor: '#d2e3fc',
-            },
-          }}
-        >
-          {isGoogleLoading ? 'Connecting to Google...' : 'Sign in with Google'}
-        </Button>
+        {/* For now, we only have Magic Link, so no toggle is needed.
+            If you add back password login, you can re-add the toggle here. */}
         
-        <Divider sx={{ my: 2 }} />
+        <MagicLinkForm />
+        
 
-        <Button
-          component="a"
-          href="/register"
-          variant="contained"
-          color="primary"
-          fullWidth
-          sx={{ mt: 2 }}
-          disabled={isAnyLoading}
-          onClick={(e) => e.preventDefault()}
-        >
-          Create New Account
-        </Button>
       </Paper>
     </Box>
   );
 };
 
-export default Login;
+export default LoginPage;

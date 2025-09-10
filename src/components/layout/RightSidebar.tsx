@@ -2,60 +2,32 @@
 
 import React, { useState, useEffect, useCallback, FC, useContext } from 'react';
 import {
-    Box,
-    Typography,
-    Paper,
-    Divider,
-    Avatar,
-    List,
-    ListItem,
-    ListItemAvatar,
-    ListItemText,
-    Button,
-    CircularProgress,
-    Alert,
+    Box, Typography, Paper, Divider, Avatar, List, ListItem, ListItemAvatar,
+    ListItemText, Button, CircularProgress, Alert,
 } from '@mui/material';
-import AuthContext from '../../context/AuthContext'; // Adjust path if needed
-import {getFullImageUrl} from '../../utils/imgUrl';
+import AuthContext from '../../context/AuthContext';
+import { getFullImageUrl } from '../../utils/imgUrl';
 
-// --- Define Interfaces ---
+// --- Interfaces (no changes needed) ---
 interface UserSuggestion {
     _id: string;
     firstName: string;
     username: string;
-    profilePicture?: string; // Expecting profilePicture from API
-    // profileImage?: string; // Keep if API might send either, normalize later
+    profilePicture?: string;
     bio?: string;
 }
-
-interface ApiError {
-    message: string;
-}
-
-interface SuggestionsApiResponse {
-    suggestions: UserSuggestion[];
-}
-
-
+interface ApiError { message: string; }
 interface ActiveFriend {
     _id: string;
     firstName: string;
     username: string;
-    profilePicture?: string; // Expecting profilePicture from API
-    // profileImage?: string;
+    profilePicture?: string;
     lastActive?: string;
 }
 
-interface ActiveFriendsApiResponse {
-    activeFriends: ActiveFriend[];
-}
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-// --- API Base URL ---
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'; // Ensure this points to backend
-
-// --- Component ---
 const RightSidebar: FC = () => {
-    // --- State ---
     const [suggestions, setSuggestions] = useState<UserSuggestion[]>([]);
     const [isLoadingSuggestions, setIsLoadingSuggestions] = useState<boolean>(true);
     const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
@@ -65,105 +37,96 @@ const RightSidebar: FC = () => {
     const [isLoadingActive, setIsLoadingActive] = useState<boolean>(true);
     const [activeError, setActiveError] = useState<string | null>(null);
 
-    // --- Context ---
-    const {
-        token: authToken,
-        isAuthenticated,
-        loading: authLoading
-    } = useContext(AuthContext);
+    // Context now provides simpler state
+    const { isAuthenticated, loading: authLoading } = useContext(AuthContext);
 
     // --- Effect to Fetch Data ---
     useEffect(() => {
-        const fetchSuggestions = async () => {
-            // ❗️ FIX: The 'if (!authToken)' check has been REMOVED.
-            setIsLoadingSuggestions(true);
-            setSuggestionsError(null);
+        const fetchData = async <T,>(
+            endpoint: string,
+            setData: React.Dispatch<React.SetStateAction<T[]>>,
+            setError: React.Dispatch<React.SetStateAction<string | null>>,
+            setLoading: React.Dispatch<React.SetStateAction<boolean>>
+        ) => {            
+            setLoading(true);
+            setError(null);
             try {
-                const response = await fetch(`${API_BASE_URL}/friends/suggestions?limit=5`, {
-                    credentials: 'include', // This correctly tells the browser to send the auth cookie
-                    // ❗️ FIX: The manual 'Authorization' header has been REMOVED.
+                // The browser automatically sends the session cookie with this request
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                    credentials: 'include', 
                 });
                 if (!response.ok) {
                     const errorData: ApiError = await response.json().catch(() => ({ message: `HTTP error! status: ${response.status}` }));
                     throw new Error(errorData.message);
                 }
-                const data: SuggestionsApiResponse = await response.json();
-                setSuggestions(data.suggestions || []);
-            } catch (err) {
-                setSuggestionsError(err instanceof Error ? err.message : 'Failed to load suggestions.');
-                setSuggestions([]);
-            } finally {
-                setIsLoadingSuggestions(false);
-            }
-        };
-
-        const fetchActiveFriends = async () => {
-            // ❗️ FIX: The 'if (!authToken)' check has been REMOVED.
-            setIsLoadingActive(true);
-            setActiveError(null);
-            try {
-                const response = await fetch(`${API_BASE_URL}/friends/active?limit=10`, {
-                    credentials: 'include', // This correctly tells the browser to send the auth cookie
-                    // ❗️ FIX: The manual 'Authorization' header has been REMOVED.
-                });
-                if (!response.ok) {
-                    const errorData: ApiError = await response.json().catch(() => ({ message: `HTTP error! status: ${response.status}` }));
-                    throw new Error(errorData.message);
+                const data = await response.json();
+                // Assumes data has a key like 'suggestions' or 'activeFriends'
+                const result = Object.values(data)[0];
+                if (Array.isArray(result)) {
+                    setData(result as T[]);
+                } else {
+                    // This handles cases where the API gives an unexpected response format
+                    console.warn('API response did not contain a valid array:', data);
+                    setData([]);
                 }
-                const data: ActiveFriendsApiResponse = await response.json();
-                setActiveFriends(data.activeFriends || []);
             } catch (err) {
-                setActiveError(err instanceof Error ? err.message : 'Failed to load active friends.');
-                setActiveFriends([]);
+                setError(err instanceof Error ? err.message : 'Failed to load data.');
+                setData([]);
             } finally {
-                setIsLoadingActive(false);
+                setLoading(false);
             }
         };
 
         if (authLoading) {
-            setIsLoadingSuggestions(true);
-            setIsLoadingActive(true);
+            // Wait for auth state to be resolved
             return;
         }
 
-        // ❗️ FIX: The main condition now ONLY checks isAuthenticated
         if (isAuthenticated) {
-            fetchSuggestions();
-            fetchActiveFriends();
+            // If logged in, fetch data
+            fetchData('/friends/suggestions?limit=5', setSuggestions, setSuggestionsError, setIsLoadingSuggestions);
+            fetchData('/friends/active?limit=10', setActiveFriends, setActiveError, setIsLoadingActive);
         } else {
+            // If not logged in, clear state
             setIsLoadingSuggestions(false);
             setSuggestions([]);
             setIsLoadingActive(false);
             setActiveFriends([]);
         }
-    // ❗️ FIX: The dependency array is simplified
     }, [isAuthenticated, authLoading]);
 
 
     const handleAddFriend = useCallback(async (userId: string) => {
-        if (!isAuthenticated || !authToken) {
+        // No longer need to check for authToken
+        if (!isAuthenticated) {
             setSuggestionsError('Authentication required to send request.');
             return;
         }
         setSendingRequestId(userId);
         try {
             const response = await fetch(`${API_BASE_URL}/friends/request/${userId}`, {
-                credentials: 'include',
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                credentials: 'include', // Sends the session cookie
+                // The Authorization header is now removed.
+                headers: { 'Content-Type': 'application/json' },
             });
             if (!response.ok) {
                 const errorData: ApiError = await response.json().catch(() => ({ message: `HTTP error! status: ${response.status}` }));
                 throw new Error(errorData.message);
             }
+            // On success, remove the user from the suggestions list
             setSuggestions(prev => prev.filter(user => user._id !== userId));
         } catch (err) {
             setSuggestionsError(err instanceof Error ? err.message : 'Failed to send friend request.');
         } finally {
             setSendingRequestId(null);
         }
-    }, [authToken, isAuthenticated]);
+    }, [isAuthenticated]); // Dependency array updated
 
+    // --- Rendering logic (renderSuggestions, renderActiveFriends) remains the same ---
+    // No changes are needed in the JSX that renders the components.
+    
+    // (Your existing renderSuggestions and renderActiveFriends JSX goes here)
 
     const renderSuggestions = () => {
         if (isLoadingSuggestions) {
@@ -180,20 +143,13 @@ const RightSidebar: FC = () => {
         }
         return (
             <List sx={{ p: 0 }}>
-                {/* Show non-critical errors without replacing list */}
                 {suggestionsError && <Alert severity="warning" sx={{ mb: 1 }}>{suggestionsError}</Alert>}
                 {suggestions.map((user) => {
-                    // --- CORRECTION HERE ---
                     const imageUrl = getFullImageUrl(user.profilePicture, 'profile');
-                    // Log the URL being used for each suggestion
-                    // console.log(`[Suggestion] User: ${user.username}, Image Filename: ${user.profilePicture}, Final URL: ${imageUrl}`);
                     return (
                         <ListItem key={user._id} alignItems="flex-start" sx={{ px: 0, py: 1 }}>
                             <ListItemAvatar>
-                                <Avatar
-                                    alt={user.firstName}
-                                    src={imageUrl} // Use the generated full URL
-                                />
+                                <Avatar alt={user.firstName} src={imageUrl} />
                             </ListItemAvatar>
                             <ListItemText
                                 primary={user.firstName || 'User'}
@@ -212,7 +168,6 @@ const RightSidebar: FC = () => {
                             </Button>
                         </ListItem>
                     );
-                    // --- END CORRECTION ---
                 })}
             </List>
         );
@@ -226,7 +181,7 @@ const RightSidebar: FC = () => {
             return <Alert severity="error" sx={{ mt: 1 }}>{activeError}</Alert>;
         }
         if (!isAuthenticated) {
-             return null; // Don't show if not logged in
+             return null;
         }
         if (!activeFriends.length) {
             return <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No friends currently active.</Typography>;
@@ -234,32 +189,21 @@ const RightSidebar: FC = () => {
         return (
             <List sx={{ p: 0 }}>
                 {activeFriends.map((friend) => {
-                    // --- CORRECTION HERE ---
                     const imageUrl = getFullImageUrl(friend.profilePicture, 'profile');
-                     // Log the URL being used for each active friend
-                    // console.log(`[ActiveFriend] User: ${friend.username}, Image Filename: ${friend.profilePicture}, Final URL: ${imageUrl}`);
                     return (
                         <ListItem key={friend._id} alignItems="center" sx={{ px: 0, py: 0.5 }}>
                             <ListItemAvatar sx={{ minWidth: 'auto', mr: 1.5 }}>
-                                <Avatar
-                                    sx={{ width: 32, height: 32 }}
-                                    alt={friend.firstName}
-                                    src={imageUrl} // Use the generated full URL
-                                />
+                                <Avatar sx={{ width: 32, height: 32 }} alt={friend.firstName} src={imageUrl} />
                             </ListItemAvatar>
-                            <ListItemText
-                                primary={friend.firstName}
-                                primaryTypographyProps={{ variant: 'body2' }}
-                            />
+                            <ListItemText primary={friend.firstName} primaryTypographyProps={{ variant: 'body2' }} />
                             <Box sx={{ width: 8, height: 8, bgcolor: 'success.main', borderRadius: '50%', ml: 1, boxShadow: '0 0 3px rgba(0,200,0,0.7)' }}/>
                         </ListItem>
                     );
-                    // --- END CORRECTION ---
                 })}
             </List>
         );
     };
-
+    
     return (
         <Paper
             elevation={0}
