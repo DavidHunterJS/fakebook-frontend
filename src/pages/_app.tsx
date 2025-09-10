@@ -18,17 +18,13 @@ const theme = createTheme({
   // Your theme settings...
 });
 
-
-
-
 // Inner component that has access to auth context
 function AppContent({ Component, pageProps }: AppProps) {
   const router = useRouter();
   const authContext = useContext(AuthContext);
   
-  // Extract user and token from your auth context
-  const userId = authContext.user?._id || null;  // Remove the user?.id fallback
-  const authToken = authContext.token || null;
+  // ✅ FIX: Extract only the user ID. The authToken is no longer needed with session cookies.
+  const userId = authContext.user?._id || null;
   
   // Define paths that should have header hidden
   const noHeaderPaths = ['/login', '/register', '/forgot-password', '/reset-password','/welcome'];
@@ -58,7 +54,8 @@ function AppContent({ Component, pageProps }: AppProps) {
         <ThemeProvider theme={theme}>
           <CssBaseline />
           <Layout hideHeader={hideHeader} hideSidebars={hideSidebars}>
-            <Component {...pageProps} userId={userId} authToken={authToken} />
+            {/* ✅ FIX: Pass only the userId prop. authToken is removed. */}
+            <Component {...pageProps} userId={userId} />
           </Layout>
         </ThemeProvider>
       </SocketProvider>
