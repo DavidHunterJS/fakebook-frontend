@@ -1,61 +1,80 @@
-// src/context/SocketContext.tsx
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { io, Socket } from 'socket.io-client';
-import useAuth from '../hooks/useAuth'; // Assuming useAuth provides isAuthenticated
+import AuthContext from './AuthContext';
 
-type SocketContextType = {
+interface ISocketContext {
   socket: Socket | null;
-  isConnected: boolean;
-};
+  isSocketConnected: boolean;
+}
 
-const SocketContext = createContext<SocketContextType>({
+const SocketContext = createContext<ISocketContext>({
   socket: null,
-  isConnected: false,
+  isSocketConnected: false,
 });
 
-export const useSocket = () => useContext(SocketContext);
+export const useSocket = () => {
+  return useContext(SocketContext);
+};
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  // Get the isAuthenticated status from your auth hook
-  const { isAuthenticated } = useAuth();
+  const [isSocketConnected, setIsSocketConnected] = useState(false);
+  
+  const { isAuthenticated, logout } = useContext(AuthContext);
 
   useEffect(() => {
+    // This effect now correctly handles the socket lifecycle based ONLY on the
+    // user's authentication status, preventing the infinite loop.
     if (isAuthenticated) {
-      const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL!, {
-        withCredentials: true,  
+      const newSocket = io(process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:5000', {
+        withCredentials: true,
+        transports: ['websocket', 'polling'],
+        secure: process.env.NODE_ENV === 'production',
       });
 
       setSocket(newSocket);
+      
+      newSocket.on('connect', () => {
+        console.log('✅ Socket connected:', newSocket.id);
+        setIsSocketConnected(true);
+      });
 
-      const onConnect = () => {
-        console.log('✅ Socket connected successfully using session cookie.');
-        setIsConnected(true);
-      };
+      newSocket.on('disconnect', (reason) => {
+        console.warn('Socket disconnected:', reason);
+        setIsSocketConnected(false);
+      });
 
-      const onDisconnect = () => {
-        console.log('Socket disconnected.');
-        setIsConnected(false);
-      };
+      newSocket.on('connect_error', (err) => {
+        console.error('Socket connection error:', err.message);
+        if (err.message === 'unauthorized') {
+          console.error('Socket authentication failed. Logging out to prevent loop.');
+          logout(); // Trigger a logout if the session is rejected.
+        }
+      });
 
-      newSocket.on('connect', onConnect);
-      newSocket.on('disconnect', onDisconnect);
-
+      // The cleanup function runs when the component unmounts or when `isAuthenticated` becomes false.
       return () => {
-        newSocket.off('connect', onConnect);
-        newSocket.off('disconnect', onDisconnect);
-        newSocket.disconnect();
+        console.log('Cleaning up socket connection.');
+        newSocket.off('connect');
+        newSocket.off('disconnect');
+        newSocket.off('connect_error');
+        newSocket.close();
+        setSocket(null);
+        setIsSocketConnected(false);
       };
     }
-  // ❗️ Change the dependency array
-  }, [isAuthenticated]);
+    // ✅ FIX: The effect no longer depends on `socket`, which breaks the infinite loop.
+  }, [isAuthenticated, logout]);
 
-  const value = { socket, isConnected };
+  const contextValue = useMemo(() => ({
+    socket,
+    isSocketConnected,
+  }), [socket, isSocketConnected]);
 
   return (
-    <SocketContext.Provider value={value}>
+    <SocketContext.Provider value={contextValue}>
       {children}
     </SocketContext.Provider>
   );
 };
+
