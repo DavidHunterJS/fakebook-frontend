@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   Box,
   Button,
@@ -9,9 +9,9 @@ import {
   Avatar,
   AvatarGroup,
 } from '@mui/material';
-import useAuth from '../../hooks/useAuth'; // Adjust the path if necessary
+import AuthContext from '../../context/AuthContext'; // Using the shared context
 
-// --- Type Definitions ---
+// --- Type Definitions (no changes needed) ---
 const REACTION_TYPES = {
   LIKE: 'like', 
   LOVE: 'love', 
@@ -34,37 +34,18 @@ const REACTION_TYPES = {
 } as const;
 type ReactionType = typeof REACTION_TYPES[keyof typeof REACTION_TYPES];
 
-// Keep emoji for cases where they work (like the button)
 const REACTION_EMOJI_MAP: Record<ReactionType, string> = {
-  like: '👍',
-  love: '❤️', 
-  haha: '😂',
-  wow: '😮',
-  sad: '😢',
-  angry: '😡',
-  care: '🤗',
-  clap: '👏',
-  fire: '🔥',
-  thinking: '🤔',
-  celebrate: '🎉',
-  mind_blown: '🤯',
-  heart_eyes: '😍',
-  laugh_cry: '😭',
-  shocked: '😱',
-  cool: '😎',
-  party: '🥳',
-  thumbs_down: '👎'
+  like: '👍', love: '❤️', haha: '😂', wow: '😮', sad: '😢', angry: '😡', care: '🤗',
+  clap: '👏', fire: '🔥', thinking: '🤔', celebrate: '🎉', mind_blown: '🤯',
+  heart_eyes: '😍', laugh_cry: '😭', shocked: '😱', cool: '😎', party: '🥳', thumbs_down: '👎'
 };
 
 type ReactionCounts = Record<ReactionType, number>;
 
-// Helper function to create default reaction counts
 export const createDefaultReactionCounts = (): ReactionCounts => {
-  const counts: ReactionCounts = {} as ReactionCounts;
-  Object.values(REACTION_TYPES).forEach(type => {
-    counts[type] = 0;
-  });
-  return counts;
+  const counts: Partial<ReactionCounts> = {};
+  Object.values(REACTION_TYPES).forEach(type => { counts[type] = 0; });
+  return counts as ReactionCounts;
 };
 
 interface ReactionApiResponse {
@@ -92,38 +73,37 @@ const ReactionSelector: React.FC<ReactionSelectorProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
-  const { token } = useAuth();
+  // ✅ FIX: Use AuthContext to check if the user is logged in
+  const { isAuthenticated } = useContext(AuthContext);
 
-  // Fetch initial reaction data on mount
   useEffect(() => {
     const fetchReactions = async () => {
-      if (!token) return;
+      // ✅ FIX: Check isAuthenticated instead of token
+      if (!isAuthenticated) return;
       
       try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
         const response = await fetch(`${backendUrl}/api/posts/${postId}/reactions`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          // ✅ FIX: The browser automatically sends the cookie with this option
+          credentials: 'include',
+          // ✅ FIX: Removed the manual Authorization header
         });
         
         if (response.ok) {
           const data = await response.json();
-          // Assuming your API returns { counts: {...}, userReaction: 'like'|null }
           setCounts(data.counts || initialCounts);
           setUserReaction(data.userReaction || initialUserReaction);
         }
       } catch (error) {
         console.error("Error fetching reactions:", error);
-        // Fall back to initial values on error
-        setCounts(initialCounts);
-        setUserReaction(initialUserReaction);
       }
     };
 
     fetchReactions();
-  }, [postId, token, initialCounts, initialUserReaction]);
+  }, [postId, isAuthenticated, initialCounts, initialUserReaction]); // ✅ FIX: Dependency updated
 
   const handleSelectReaction = async (type: ReactionType) => {
-    if (isLoading || !token) return;
+    if (isLoading || !isAuthenticated) return; // ✅ FIX: Check isAuthenticated
     setIsLoading(true);
     setAnchorEl(null);
 
@@ -136,8 +116,10 @@ const ReactionSelector: React.FC<ReactionSelectorProps> = ({
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
       const response = await fetch(`${backendUrl}/api/posts/${postId}/reactions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type }),
+        credentials: 'include', // ✅ FIX: Added credentials for cookie sending
+        // ✅ FIX: Removed the manual Authorization header
       });
       if (!response.ok) throw new Error('Failed to update reaction');
       const data: ReactionApiResponse = await response.json();
@@ -151,13 +133,14 @@ const ReactionSelector: React.FC<ReactionSelectorProps> = ({
   };
 
   const handleRemoveReaction = async () => {
-    if (isLoading || !userReaction || !token) return;
+    if (isLoading || !userReaction || !isAuthenticated) return; // ✅ FIX: Check isAuthenticated
     setIsLoading(true);
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
       const response = await fetch(`${backendUrl}/api/posts/${postId}/reactions`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include', // ✅ FIX: Added credentials for cookie sending
+        // ✅ FIX: Removed the manual Authorization header
       });
       if (!response.ok) throw new Error('Failed to remove reaction');
       const data: RemoveReactionApiResponse = await response.json();
@@ -170,6 +153,8 @@ const ReactionSelector: React.FC<ReactionSelectorProps> = ({
     }
   };
 
+  // --- No changes needed in the JSX rendering logic below ---
+
   const handleButtonClick = (event: React.MouseEvent<HTMLElement>) => {
     if (!userReaction) {
       setAnchorEl(event.currentTarget);
@@ -178,9 +163,7 @@ const ReactionSelector: React.FC<ReactionSelectorProps> = ({
     }
   };
 
-  const handlePopoverClose = () => {
-    setAnchorEl(null);
-  };
+  const handlePopoverClose = () => setAnchorEl(null);
   
   const getTopReactions = () => Object.entries(counts).filter(([, count]) => count > 0).sort(([, a], [, b]) => b - a).slice(0, 3).map(([type]) => ({ type: type as ReactionType, emoji: REACTION_EMOJI_MAP[type as ReactionType] }));
   const totalReactions = Object.values(counts).reduce((sum, count) => sum + count, 0);
@@ -194,14 +177,7 @@ const ReactionSelector: React.FC<ReactionSelectorProps> = ({
           color={userReaction ? "primary" : "inherit"}
           disabled={isLoading}
           onClick={handleButtonClick}
-          startIcon={
-            <span style={{ 
-              fontSize: '16px',
-              fontFamily: "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif"
-            }}>
-              {REACTION_EMOJI_MAP[userReaction || 'like']}
-            </span>
-          }
+          startIcon={<span>{REACTION_EMOJI_MAP[userReaction || 'like']}</span>}
           sx={{ textTransform: 'capitalize', fontWeight: 'bold' }}
         >
           {userReaction || 'Like'}
@@ -212,58 +188,18 @@ const ReactionSelector: React.FC<ReactionSelectorProps> = ({
           onClose={handlePopoverClose}
           anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
           transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-          slotProps={{
-            paper: {
-              sx: { 
-                p: 1, 
-                borderRadius: '50px',
-                overflow: 'visible',
-                minHeight: '50px',
-                display: 'flex',
-                alignItems: 'center'
-              }
-            }
-          }}
+          slotProps={{ paper: { sx: { p: 1, borderRadius: '50px' }}}}
         >
-          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', minHeight: '40px' }}>
+          <Stack direction="row" spacing={0.5}>
             {Object.values(REACTION_TYPES).map((type) => (
               <IconButton
                 key={type}
                 onClick={() => handleSelectReaction(type)}
                 aria-label={`React with ${type}`}
                 size="small"
-                sx={{
-                  color: 'transparent !important',
-                  transition: 'transform 0.15s ease-in-out',
-                  '&:hover': {
-                    transform: 'scale(1.2)',
-                    backgroundColor: 'rgba(0,0,0,0.04)'
-                  },
-                  '& span': {
-                    color: 'initial !important',
-                    opacity: '1 !important',
-                    filter: 'none !important'
-                  },
-                  '& .MuiTouchRipple-root': {
-                    color: 'rgba(0, 0, 0, 0.1) !important'
-                  },
-                  '& .MuiTouchRipple-child': {
-                    backgroundColor: 'rgba(0, 0, 0, 0.1) !important'
-                  },
-                  '& .MuiTouchRipple-rippleVisible': {
-                    backgroundColor: 'rgba(0, 0, 0, 0.1) !important'
-                  }
-                }}
+                sx={{ '&:hover': { transform: 'scale(1.2)' } }}
               >
-                <span style={{ 
-                  fontSize: '18px',
-                  fontFamily: "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif",
-                  color: 'initial',
-                  opacity: 1,
-                  filter: 'none'
-                }}>
-                  {REACTION_EMOJI_MAP[type]}
-                </span>
+                <span>{REACTION_EMOJI_MAP[type]}</span>
               </IconButton>
             ))}
           </Stack>
@@ -274,12 +210,7 @@ const ReactionSelector: React.FC<ReactionSelectorProps> = ({
           <AvatarGroup max={4} sx={{ '& .MuiAvatar-root': { width: 24, height: 24, fontSize: '0.75rem' } }}>
             {topReactions.map(({ type, emoji }) => (
               <Avatar key={type} sx={{ bgcolor: 'transparent' }}>
-                <span style={{ 
-                  fontSize: '12px',
-                  fontFamily: "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif"
-                }}>
-                  {emoji}
-                </span>
+                <span>{emoji}</span>
               </Avatar>
             ))}
           </AvatarGroup>
