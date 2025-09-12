@@ -28,18 +28,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:5000';
 
-        // ✅ --- THIS IS THE FINAL, MOST ROBUST CONFIGURATION ---
         const newSocket = io(backendUrl, {
-          // Critical for sending the session cookie.
           withCredentials: true,
-          // Tells the client how to connect, starting with the most modern method.
           transports: ['websocket', 'polling'],
-          // Ensures the connection automatically uses wss:// in production.
           secure: process.env.NODE_ENV === 'production',
-          // Helps bypass some corporate proxies and firewalls.
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000,
+          
+          // ✅ --- THIS IS THE FINAL FIX ---
+          // This tells the client to connect to the specific path
+          // that the server is listening on.
+          path: '/socket.io/',
+          // --- END OF FIX ---
         });
 
         socketRef.current = newSocket;
@@ -56,7 +54,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         newSocket.on('connect_error', (err) => {
           console.error('[SocketContext] Socket connection error:', err.message);
-          // If the server explicitly says we are unauthorized, it means our session is bad.
           if (err.message === 'unauthorized') {
             console.error('[SocketContext] Socket authentication failed. Triggering protective logout.');
             logout();
@@ -73,9 +70,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     return () => {
-      // This cleanup runs if the provider is ever unmounted.
       if (socketRef.current) {
-        console.log('[SocketContext] Provider unmounting, cleaning up socket.');
+        console.log('[SocketContext] Provider unmounting, ensuring socket is closed.');
         socketRef.current.close();
         socketRef.current = null;
       }
