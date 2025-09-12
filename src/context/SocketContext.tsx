@@ -17,73 +17,75 @@ export const useSocket = () => {
 };
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // ✅ FIX: Use a ref to hold the socket instance. This will not trigger re-renders.
   const socketRef = useRef<Socket | null>(null);
-  
-  // State is now only used to report the connection status, not to hold the instance.
   const [isSocketConnected, setIsSocketConnected] = useState(false);
-  
   const { isAuthenticated, logout } = useContext(AuthContext);
 
   useEffect(() => {
-    // This effect now robustly manages the socket's lifecycle.
     if (isAuthenticated) {
-      // Only create a socket if one doesn't already exist in our ref.
       if (!socketRef.current) {
-        console.log('User is authenticated, creating new socket connection.');
+        console.log('[SocketContext] User authenticated, creating new socket connection...');
         
-        const newSocket = io(process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:5000', {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:5000';
+
+        // ✅ --- THIS IS THE FINAL, MOST ROBUST CONFIGURATION ---
+        const newSocket = io(backendUrl, {
+          // Critical for sending the session cookie.
           withCredentials: true,
+          // Tells the client how to connect, starting with the most modern method.
           transports: ['websocket', 'polling'],
+          // Ensures the connection automatically uses wss:// in production.
           secure: process.env.NODE_ENV === 'production',
+          // Helps bypass some corporate proxies and firewalls.
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
         });
 
-        // Store the instance in the ref for persistence.
         socketRef.current = newSocket;
 
         newSocket.on('connect', () => {
-          console.log('✅ Socket connected:', newSocket.id);
+          console.log('✅ [SocketContext] Socket connected successfully:', newSocket.id);
           setIsSocketConnected(true);
         });
 
         newSocket.on('disconnect', (reason) => {
-          console.warn('Socket disconnected:', reason);
+          console.warn('[SocketContext] Socket disconnected:', reason);
           setIsSocketConnected(false);
         });
 
         newSocket.on('connect_error', (err) => {
-          console.error('Socket connection error:', err.message);
+          console.error('[SocketContext] Socket connection error:', err.message);
+          // If the server explicitly says we are unauthorized, it means our session is bad.
           if (err.message === 'unauthorized') {
-            console.error('Socket authentication failed. Logging out.');
+            console.error('[SocketContext] Socket authentication failed. Triggering protective logout.');
             logout();
           }
         });
       }
     } else {
-      // If the user is not authenticated, ensure any existing socket is disconnected.
       if (socketRef.current) {
-        console.log('User is not authenticated, cleaning up existing socket.');
+        console.log('[SocketContext] User is not authenticated, closing existing socket.');
         socketRef.current.close();
         socketRef.current = null;
         setIsSocketConnected(false);
       }
     }
 
-    // This cleanup function will run when the SocketProvider itself is unmounted.
     return () => {
+      // This cleanup runs if the provider is ever unmounted.
       if (socketRef.current) {
-        console.log('SocketProvider is unmounting, ensuring socket is closed.');
+        console.log('[SocketContext] Provider unmounting, cleaning up socket.');
         socketRef.current.close();
         socketRef.current = null;
       }
     };
   }, [isAuthenticated, logout]);
 
-  // The context value provides the current socket instance from the ref.
   const contextValue = useMemo(() => ({
     socket: socketRef.current,
     isSocketConnected,
-  }), [isSocketConnected]); // Only re-calculate when the connection status changes.
+  }), [isSocketConnected]);
 
   return (
     <SocketContext.Provider value={contextValue}>
