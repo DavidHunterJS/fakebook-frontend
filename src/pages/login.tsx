@@ -34,7 +34,7 @@ const MagicLinkForm = () => {
     return (
       <Box sx={{ textAlign: 'center', py: 3 }}>
         <Typography variant="h6" color="success.main" sx={{ mb: 2 }}>
-          ✅ Magic Link Sent!
+          ✅ Email Link Sent!
         </Typography>
         <Typography variant="body2" color="textSecondary">
           Check your email for a secure login link. It will expire in 15 minutes.
