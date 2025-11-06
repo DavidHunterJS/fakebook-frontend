@@ -118,7 +118,7 @@ const Header = () => {
         handleMenuClose();
         if (!user || !user._id) {
           console.error('User ID is missing for profile navigation:', user);
-          router.push('/dashboard'); // Fallback route
+          router.push('/'); // Fallback route
           return;
         }
         router.push(`/profile/${user._id}`);
@@ -206,7 +206,7 @@ const Header = () => {
             sx={{ display: { xs: 'none', sm: 'block' }, cursor: 'pointer' }}
             onClick={() => router.push('/')}
           >
-            Trippy.lol
+            ComplianceKit.app
           </Typography>
           {isAuthenticated && user && (
             <>

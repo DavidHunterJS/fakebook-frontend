@@ -9,6 +9,9 @@ import Layout from '../components/layout/Layout';
 import { useRouter } from 'next/router';
 import { useContext } from 'react';
 import AuthContext from '../context/AuthContext';
+import { GoogleAnalytics } from '@next/third-parties/google'
+
+
 
 // Create a client
 const queryClient = new QueryClient();
@@ -27,7 +30,7 @@ function AppContent({ Component, pageProps }: AppProps) {
   const userId = authContext.user?._id || null;
   
   // Define paths that should have header hidden
-  const noHeaderPaths = ['/login', '/register', '/forgot-password', '/reset-password','/welcome'];
+  const noHeaderPaths = ['/login', '/register', '/forgot-password', '/reset-password','/welcome','/', '/pricing', '/tos', '/privacy'];
   const hideHeader = noHeaderPaths.includes(router.pathname);
   
   // Define paths that should have sidebars hidden
@@ -40,7 +43,13 @@ function AppContent({ Component, pageProps }: AppProps) {
     '/friends',
     '/settings/profile',
     '/aitoolbox',
-    '/workflows'
+    '/workflows',
+    '/pricing',
+    '/checker',
+    '/welcome',
+    '/',
+    '/tos',
+    '/privacy'
   ];
   
   // Check if current path starts with /profile/ to match dynamic routes
@@ -54,9 +63,9 @@ function AppContent({ Component, pageProps }: AppProps) {
         <ThemeProvider theme={theme}>
           <CssBaseline />
           <Layout hideHeader={hideHeader} hideSidebars={hideSidebars}>
-            {/* ✅ FIX: Pass only the userId prop. authToken is removed. */}
             <Component {...pageProps} userId={userId} />
           </Layout>
+          <GoogleAnalytics gaId="G-JZF1QKEQMQ" />
         </ThemeProvider>
       </SocketProvider>
   );

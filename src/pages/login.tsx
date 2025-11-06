@@ -82,7 +82,7 @@ const LoginPage = () => {
   // Redirect if user is already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/dashboard');
+      router.push('/');
     }
   }, [isAuthenticated, router]);
   
