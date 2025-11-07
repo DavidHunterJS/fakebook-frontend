@@ -7,7 +7,19 @@ import html from 'remark-html';
 
 export async function getAllPosts() {
   const postsDirectory = path.join(process.cwd(), 'posts');
+  
+  // Check if the directory exists
+  if (!fs.existsSync(postsDirectory)) {
+    console.warn('Posts directory not found, returning empty array');
+    return [];
+  }
+  
   const filenames = fs.readdirSync(postsDirectory);
+  
+  // Return empty array if no files
+  if (filenames.length === 0) {
+    return [];
+  }
   
   const posts = await Promise.all(
     filenames.map(async (filename) => {
@@ -15,14 +27,8 @@ export async function getAllPosts() {
       const fileContents = fs.readFileSync(filePath, 'utf8');
       const { data, content } = matter(fileContents);
       
-      console.log('Raw content length:', content.length);
-      console.log('First 200 chars:', content.substring(0, 200));
-      
       const processedContent = await remark().use(html).process(content);
       const htmlContent = processedContent.toString();
-      
-      console.log('Processed HTML length:', htmlContent.length);
-      console.log('First 200 chars HTML:', htmlContent.substring(0, 200));
       
       return {
         slug: filename.replace('.md', ''),
