@@ -1,5 +1,5 @@
 // src/pages/blog/[slug].tsx
-import { getPostBySlug, getAllPosts } from '@/lib/posts';
+import { getPostBySlug, getAllPosts } from '../../lib/posts';
 import type { GetStaticPropsContext, GetStaticPathsResult } from 'next';
 import { ParsedUrlQuery } from 'querystring'; // Needed for params type
 

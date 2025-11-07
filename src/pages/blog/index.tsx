@@ -1,6 +1,6 @@
 // src/pages/blog/index.tsx
 import Link from 'next/link';
-import { getAllPosts } from '@/lib/posts';
+import { getAllPosts } from '../../lib/posts';
 import type { GetStaticPropsResult } from 'next';
 
 // --- 1. Define your Post type ---
