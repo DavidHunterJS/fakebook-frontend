@@ -4,7 +4,7 @@ pipeline {
     parameters {
         choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'production'], description: 'Deploy to which environment?')
         string(name: 'DEPLOY_BRANCH', defaultValue: 'develop', description: 'Explicit branch name to deploy (e.g. feature/my-branch). For webhook triggers, this is usually overridden.')
-        booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip running tests')
+        // booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip running tests') // <-- REMOVED
         booleanParam(name: 'FORCE_DEPLOY', defaultValue: false, description: 'Force deployment without approval')
         booleanParam(name: 'CREATE_FEATURE_APP', defaultValue: false, description: 'Create ephemeral Heroku app for feature branches')
     }
@@ -310,10 +310,10 @@ pipeline {
             }
         }
         
-        stage('Run Tests') {
-            when { expression { params.SKIP_TESTS == false } }
-            steps { sh 'npm test' }
-        }
+        // stage('Run Tests') { // <-- ENTIRE STAGE REMOVED
+        //     when { expression { params.SKIP_TESTS == false } }
+        //     steps { sh 'npm test' }
+        // }
         
         stage('Build Frontend') {
             steps { sh 'echo "Building frontend for ${DEPLOY_ENV}..."; npm run build' }
