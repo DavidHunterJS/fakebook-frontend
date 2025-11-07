@@ -19,7 +19,8 @@ interface FixerPanelProps {
 }
 
 // Props for the internal ImageFixer logic
-interface ImageFixerProps extends Omit<FixerPanelProps, 'checkerState'> {}
+// FIX: Changed 'interface' to 'type' to resolve the error
+type ImageFixerProps = Omit<FixerPanelProps, 'checkerState'>;
 
 // Button styles can be passed in or defined here
 const primaryBtnSx = { background: '#667eea', color: 'white', borderRadius: '8px', py: 1.2, px: 3, textTransform: 'none', '&:hover': { background: '#5a67d8' } };
@@ -72,7 +73,7 @@ const ImageFixer: React.FC<ImageFixerProps> = ({ fixerState, fixingStep, complia
             <CheckCircle sx={{ width: 48, height: 48, mx: 'auto', mb: 2, color: 'success.main' }} />
             <Typography variant="h6" color="text.primary" mb={2}>Image Fixed Successfully!</Typography>
             <Typography color="text.secondary" mb={3} fontSize={14}>
-                Your image now meets Amazon's compliance requirements.
+                Your image now meets Amazon&apos;s compliance requirements.
             </Typography>
             <Grid container spacing={2} mb={3}>
                 <Grid size={{xs:6}}>

@@ -10,27 +10,71 @@ export function useSubscription() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchSubscription = async () => {
+const fetchSubscription = async () => {
     try {
       setIsLoading(true);
       setError(null);
       const data = await subscriptionService.getSubscriptionStatus();
       setSubscription(data);
-    } catch (err: any) {
+    } catch (err: unknown) { // Keep as unknown
       console.error('DEBUG: Error caught in useSubscription:', err); 
       
       let isAuthError = false;
+      let errorMessage = 'Failed to load subscription data.'; // Default message
+
+      // --- Type-safe error handling ---
       
-      if (err.response && err.response.status === 401) {
-        isAuthError = true;
-      } else if (err.message && (err.message.includes('401') || err.message.toLowerCase().includes('not authenticated'))) {
-        isAuthError = true;
+      // Check for Axios-like error structure (e.g., err.response.status)
+      if (
+        typeof err === 'object' &&
+        err !== null &&
+        'response' in err // Check if 'response' key exists
+      ) {
+        // Safely access the response property
+        const response = (err as { response: unknown }).response; 
+        
+        // Check if response is an object with a 'status' key
+        if (
+          typeof response === 'object' &&
+          response !== null &&
+          'status' in response
+        ) {
+          // Safely access the status property
+          const status = (response as { status: unknown }).status; 
+          if (status === 401) {
+            isAuthError = true;
+          }
+        }
       }
+
+      // Check for standard Error message
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        if (err.message.includes('401') || err.message.toLowerCase().includes('not authenticated')) {
+          isAuthError = true;
+        }
+      } 
+      // Fallback for other objects with a 'message' property
+      else if (
+        typeof err === 'object' &&
+        err !== null &&
+        'message' in err // Check if 'message' key exists
+      ) {
+        // Safely access the message property and check if it's a string
+        const message = (err as { message: unknown }).message;
+        if (typeof message === 'string') {
+          errorMessage = message;
+          if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('not authenticated')) {
+            isAuthError = true;
+          }
+        }
+      }
+      // --- End of type-safe handling ---
 
       if (isAuthError) {
         setSubscription(null); 
       } else {
-        setError(err.message || 'Failed to load subscription data.');
+        setError(errorMessage);
       }
     } finally {
       setIsLoading(false);

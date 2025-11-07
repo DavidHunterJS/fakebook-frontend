@@ -210,7 +210,7 @@ const ComplianceKitPage: NextPage = () => {
               Sound familiar?
             </Typography>
             <Typography variant="body1" sx={{ color: '#334155', mt: '0.5rem' }}>
-              You upload a product image to Amazon, listing goes live, then BAM—suppressed for image violations you didn't even see. Non-compliant background, wrong dimensions, or failed the white background test.
+              You upload a product image to Amazon, listing goes live, then BAM—suppressed for image violations you didn&apos;t even see. Non-compliant background, wrong dimensions, or failed the white background test.
             </Typography>
           </Paper>
 

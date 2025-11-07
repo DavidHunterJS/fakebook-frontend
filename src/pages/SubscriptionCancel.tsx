@@ -14,7 +14,7 @@ export default function SubscriptionCancel() {
           Checkout Cancelled
         </h1>
         <p className="text-gray-600 mb-8">
-          No charges were made. You can try again anytime you're ready to upgrade.
+          No charges were made. You can try again anytime you&apos;re ready to upgrade.
         </p>
         <div className="flex gap-4 justify-center">
           <button

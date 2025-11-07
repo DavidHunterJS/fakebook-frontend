@@ -105,7 +105,7 @@ export const categorizeIssues = (data: ComplianceResult | null): CategorizedIssu
   }
   // ... (rest of your categorizeIssues logic) ...
   if (data.quality) {
-    const { dpi, overallScore, sharpnessScore, colorSpace } = data.quality;
+    const { dpi,    } = data.quality;
     if (dpi < 72) {
       minor.push({ name: "DPI (Dots Per Inch)", status: "warn", value: `${dpi} DPI`, details: "Below standard web resolution (72 DPI)", priority: "minor" });
     } else {
@@ -113,7 +113,7 @@ export const categorizeIssues = (data: ComplianceResult | null): CategorizedIssu
     }
   }
   if (data.quality) {
-    const { dpi, overallScore, sharpnessScore, colorSpace } = data.quality;
+    const {  overallScore,   } = data.quality;
     if (overallScore < 60) {
       critical.push({ name: "Image Quality", status: "fail", value: `Quality score: ${overallScore.toFixed(0)}`, details: "Poor image quality...", priority: "critical" });
     } else if (overallScore < 75) {

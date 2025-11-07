@@ -2,6 +2,8 @@
 
 import type { NextPage } from 'next';
 import Head from 'next/head';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 
 // Import MUI Components
 import {
@@ -18,12 +20,14 @@ import {
   Paper,
   Toolbar,
   Typography,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 
 // Import an icon for the list
 import CheckIcon from '@mui/icons-material/Check';
 
-// --- Reusable Style Objects (same as welcome page) ---
+// --- Reusable Style Objects ---
 const btnBase = {
   padding: '0.8rem 2rem',
   borderRadius: '50px',
@@ -44,6 +48,10 @@ const btnNeomorph = {
     background: '#e6f7f5',
     boxShadow: '4px 4px 8px #c4d9d6, -4px -4px 8px #ffffff',
   },
+  '&:disabled': {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
 };
 
 const btnPrimary = {
@@ -55,10 +63,118 @@ const btnPrimary = {
     transform: 'translateY(-2px)',
     boxShadow: '10px 10px 20px #c4d9d6, -10px -10px 20px #ffffff',
   },
+  '&:disabled': {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+    transform: 'none',
+  },
 };
 
 // --- The Pricing Page Component ---
 const PricingPage: NextPage = () => {
+  const router = useRouter();
+  const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
+
+  // Check authentication status on mount
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    try {
+      // Call your auth endpoint to check if user is authenticated
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
+        method: 'GET',
+        credentials: 'include', // Important: sends cookies with request
+      });
+
+      setIsAuthenticated(response.ok);
+    } catch (err) {
+      console.error('Auth check failed:', err);
+      setIsAuthenticated(false);
+    } finally {
+      setCheckingAuth(false);
+    }
+  };
+
+// Handle subscription purchase
+  const handleSubscribe = async (tier: 'Basic' | 'Pro') => {
+    setError(null);
+    
+    // Check if user is logged in
+    if (!isAuthenticated) {
+      // Redirect to login with return URL
+      router.push(`/login?redirect=/pricing&tier=${tier}`);
+      return;
+    }
+
+    setLoading(tier);
+
+    try {
+      // Call your backend to create checkout session
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/subscription/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Important: sends session cookie
+        body: JSON.stringify({ tier }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create checkout session');
+      }
+
+      // Redirect to Stripe Checkout
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL received');
+      }
+    } catch (err: unknown) { // <-- FIX: Changed 'any' to 'unknown'
+      console.error('Subscription error:', err);
+      
+      // Type-safe error handling
+      let message = 'Failed to start subscription. Please try again.';
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === 'string') {
+        message = err;
+      }
+      
+      setError(message);
+      setLoading(null);
+    }
+  };
+
+  // Handle free signup
+  const handleFreeSignup = () => {
+    if (!isAuthenticated) {
+      router.push('/');
+    } else {
+      router.push('/');
+    }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      setIsAuthenticated(false);
+      router.push('/');
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
+  };
+
   return (
     <>
       <Head>
@@ -96,7 +212,9 @@ const PricingPage: NextPage = () => {
                 fontSize: '1.8rem',
                 fontWeight: 700,
                 color: '#2563eb',
+                cursor: 'pointer',
               }}
+              onClick={() => router.push('/')}
             >
               Compliance
               <Typography
@@ -109,15 +227,39 @@ const PricingPage: NextPage = () => {
 
             {/* Nav Buttons */}
             <Box sx={{ display: 'flex', gap: '1rem' }}>
-              <Button href="#" sx={btnNeomorph}>
-                Log In
-              </Button>
-              <Button href="#" sx={btnPrimary}>
-                Start Free Trial
-              </Button>
+              {checkingAuth ? (
+                <CircularProgress size={24} sx={{ color: '#14b8a6' }} />
+              ) : isAuthenticated ? (
+                <>
+                  <Button onClick={() => router.push('/login')} sx={btnNeomorph}>
+                    Login
+                  </Button>
+                  <Button onClick={handleLogout} sx={btnPrimary}>
+                    Log Out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button onClick={() => router.push('/login')} sx={btnNeomorph}>
+                    Log In
+                  </Button>
+                  <Button onClick={() => router.push('/signup')} sx={btnPrimary}>
+                    Start Free Trial
+                  </Button>
+                </>
+              )}
             </Box>
           </Toolbar>
         </AppBar>
+
+        {/* ERROR ALERT */}
+        {error && (
+          <Container maxWidth="lg" sx={{ mt: 2 }}>
+            <Alert severity="error" onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          </Container>
+        )}
 
         {/* HEADER SECTION */}
         <Container maxWidth="lg" sx={{ textAlign: 'center', py: 6, px: 2 }}>
@@ -225,7 +367,7 @@ const PricingPage: NextPage = () => {
                 </List>
 
                 <Button
-                  href="#"
+                  onClick={handleFreeSignup}
                   sx={{
                     ...btnNeomorph,
                     width: '100%',
@@ -330,7 +472,8 @@ const PricingPage: NextPage = () => {
                 </List>
 
                 <Button
-                  href="#"
+                  onClick={() => handleSubscribe('Basic')}
+                  disabled={loading !== null}
                   sx={{
                     ...btnPrimary,
                     width: '100%',
@@ -339,7 +482,11 @@ const PricingPage: NextPage = () => {
                     background: 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
                   }}
                 >
-                  Start Free Trial
+                  {loading === 'Basic' ? (
+                    <CircularProgress size={24} sx={{ color: 'white' }} />
+                  ) : (
+                    'Get Basic'
+                  )}
                 </Button>
               </Paper>
             </Grid>
@@ -421,7 +568,8 @@ const PricingPage: NextPage = () => {
                 </List>
 
                 <Button
-                  href="#"
+                  onClick={() => handleSubscribe('Pro')}
+                  disabled={loading !== null}
                   sx={{
                     ...btnPrimary,
                     width: '100%',
@@ -429,14 +577,18 @@ const PricingPage: NextPage = () => {
                     padding: '0.9rem 0',
                   }}
                 >
-                  Start Free Trial
+                  {loading === 'Pro' ? (
+                    <CircularProgress size={24} sx={{ color: 'white' }} />
+                  ) : (
+                    'Get Pro'
+                  )}
                 </Button>
               </Paper>
             </Grid>
           </Grid>
         </Container>
 
-        {/* FAQ OR BOTTOM CTA SECTION (OPTIONAL) */}
+        {/* FAQ OR BOTTOM CTA SECTION */}
         <Container maxWidth="md" sx={{ textAlign: 'center', pb: 6 }}>
           <Paper
             elevation={0}
@@ -476,10 +628,10 @@ const PricingPage: NextPage = () => {
                 mb: '1.5rem',
               }}
             >
-              All plans include unlimited image checks. You only pay when you need to fix images. Credits roll over monthly so you never lose what you paid for.
+              You only pay when you need to fix images. Credits roll over monthly so you never lose what you paid for.
             </Typography>
             <Button
-              href="#"
+              onClick={handleFreeSignup}
               sx={{
                 ...btnPrimary,
                 padding: '1rem 2.5rem',

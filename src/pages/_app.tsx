@@ -30,7 +30,17 @@ function AppContent({ Component, pageProps }: AppProps) {
   const userId = authContext.user?._id || null;
   
   // Define paths that should have header hidden
-  const noHeaderPaths = ['/login', '/register', '/forgot-password', '/reset-password','/welcome','/', '/pricing', '/tos', '/privacy'];
+  const noHeaderPaths = ['/login', 
+                          '/register', 
+                          '/forgot-password', 
+                          '/reset-password',
+                          '/welcome',
+                          '/',
+                          '/pricing',
+                          '/tos',
+                          '/privacy',
+                          '/subscription/success'
+                        ];
   const hideHeader = noHeaderPaths.includes(router.pathname);
   
   // Define paths that should have sidebars hidden

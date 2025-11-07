@@ -178,7 +178,7 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
   /**
    * Main workflow function to fix, re-analyze, and update the UI.
    */
-  const handleFixAndReAnalyze = async () => {
+const handleFixAndReAnalyze = async () => {
     console.log('🚀 [FIXER] handleFixAndReAnalyze START');
     setFixerState('fixing');
     setErrorMessage(null);
@@ -282,13 +282,21 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
       // Don't call onFixSuccess here - it will be called when user navigates back
       // This prevents parent re-renders from unmounting this component
 
-    } catch (error: any) {
+    } catch (error: unknown) { // <-- FIX IS HERE
       console.error('❌ [FIXER] Error in fix/re-analyze process:', error);
-      setErrorMessage(error.message);
+      
+      // Type-safe error handling
+      let message = 'An unknown error occurred.';
+      if (error instanceof Error) {
+        message = error.message;
+      } else if (typeof error === 'string') {
+        message = error;
+      }
+      
+      setErrorMessage(message);
       setFixerState('error');
     }
   };
-  
   // --- UI RENDER ---
   
   const renderStateContent = () => {
@@ -359,7 +367,7 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
         </Avatar>
         <Box>
           <Typography variant="h4" fontWeight={700} color={theme.textPrimary}>Auto-Fix</Typography>
-          <Typography color={theme.textSecondary}>Review the "Before" and "After" images below.</Typography>
+          <Typography color={theme.textSecondary}>Review the &quot;Before&quot; and &quot;After&quot; images below.</Typography>
         </Box>
       </Box>
 

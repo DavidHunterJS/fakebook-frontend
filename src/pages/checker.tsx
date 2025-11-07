@@ -1,14 +1,14 @@
 // src/pages/checker.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Box, Typography, Button, Card, CardContent, Chip, Avatar, Menu, MenuItem,
-  LinearProgress, AppBar, Toolbar, Container, Paper, Alert, Collapse,
-  CircularProgress, IconButton, Fab
+  Box, Typography, Button, Card,  Chip, Avatar,  
+   AppBar, Toolbar, Container, Paper,  Collapse,
+  CircularProgress,  Fab
 } from '@mui/material';
 import {
-  CloudUpload, CheckCircle, Warning, Error as ErrorIcon, ExpandMore, ExpandLess,
-  PhotoCamera, AutoFixHigh, ArrowForward, Info, AccountCircle,
-  Settings, Logout, Visibility, FileCopy, Description, Close as CloseIcon
+  CloudUpload, CheckCircle, Warning, Error as ErrorIcon,
+  PhotoCamera, AutoFixHigh, ArrowForward, Info, 
+    
 } from '@mui/icons-material';
 
 // --- (IMPORTANT) Make sure to import your actual API function ---
@@ -19,8 +19,7 @@ import type { ComplianceResult } from '../types/compliance';
 import { 
   processMaskForViolations, 
   categorizeIssues,
-  type Issue,
-  type CategorizedIssues
+  type Issue
 } from '../utils/analysisUtils';
 
 // 👇 --- IMPORT YOUR CUSTOM HOOK ---
@@ -52,7 +51,7 @@ const ModernizedComplianceChecker: React.FC = () => {
   const [checkerState, setCheckerState] = useState<CheckerState>('upload');
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [processingStep, setProcessingStep] = useState<number>(0);
-  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
+  // const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
   const [complianceData, setComplianceData] = useState<ComplianceResult | null>(null);
   const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -410,7 +409,7 @@ const ModernizedComplianceChecker: React.FC = () => {
           variant="h6" 
           sx={{ color: theme.textSecondary, fontWeight: 400 }}
         >
-          Instantly check if your product images meet Amazon's requirements
+          Instantly check if your product images meet Amazon&apos;s requirements
         </Typography>
       </Box>
 
@@ -725,7 +724,7 @@ const ModernizedComplianceChecker: React.FC = () => {
       // 👇 --- Use the hook's helpers ---
       const fixesAvailable = getRemainingCredits('fix');
       // Get total from subscription, default to 0 if subscription is null
-      const fixesTotal = subscription?.credits.fixes.totalAvailable || subscription?.credits.fixes.remaining || 0;
+      // const fixesTotal = subscription?.credits.fixes.totalAvailable || subscription?.credits.fixes.remaining || 0;
       const planName = subscription?.tier || 'Free';
 
       return (

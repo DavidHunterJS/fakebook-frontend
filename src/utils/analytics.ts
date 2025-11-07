@@ -1,14 +1,17 @@
 // utils/analytics.ts
 declare global {
   interface Window {
-    gtag?: (...args: any[]) => void;
+    // FIX 1: Replaced 'any[]' with 'unknown[]'
+    // This is safer as it forces type-checking, but still flexible.
+    gtag?: (...args: unknown[]) => void;
   }
 }
 
 // Type-safe event tracking
 export const trackEvent = (
   eventName: string,
-  parameters?: Record<string, any>
+  // FIX 2: Replaced 'any' with a more specific type for GA parameters
+  parameters?: Record<string, string | number | boolean>
 ) => {
   if (typeof window !== 'undefined' && window.gtag) {
     window.gtag('event', eventName, parameters);
@@ -37,7 +40,8 @@ export const analytics = {
   // When user views results
   resultsViewed: (issuesPresent: boolean) => {
     trackEvent('results_viewed', {
-      issues_present: issuesPresent ? 'yes' : 'no',
+      // 'boolean' is included in our new type, so this is valid
+      issues_present: issuesPresent, 
     });
   },
 

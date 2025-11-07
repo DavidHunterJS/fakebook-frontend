@@ -40,7 +40,7 @@ export default function SubscriptionCancel() {
         </Typography>
 
         <Typography sx={{ color: 'text.secondary', mb: 4 }}>
-          No charges were made. You can upgrade anytime when you're ready.
+          No charges were made. You can upgrade anytime when you&apos;re ready.
         </Typography>
 
         {/* Action Buttons */}

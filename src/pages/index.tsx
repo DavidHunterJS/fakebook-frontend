@@ -2,8 +2,6 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Box, Typography, CircularProgress } from '@mui/material';
-import PostForm from '../components/post/PostForm';
-import PostList from '../components/post/PostList';
 import useAuth from '../hooks/useAuth';
 import ComplianceChecker from './checker';
 import DebugPanel from '../components/DebugPanel';

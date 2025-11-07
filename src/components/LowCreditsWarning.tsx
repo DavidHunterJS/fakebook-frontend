@@ -21,7 +21,7 @@ export default function LowCreditsWarning({ onUpgradeClick }: LowCreditsWarningP
             Running Low on Credits
           </h3>
           <p className="text-sm text-orange-700 mb-3">
-            You're down to your last few credits. Upgrade now to keep checking your images.
+            You&apos;re down to your last few credits. Upgrade now to keep checking your images.
           </p>
           <button
             onClick={onUpgradeClick}
