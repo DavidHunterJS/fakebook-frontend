@@ -1,3 +1,4 @@
+// src/pages/blog/index.tsx
 import Link from 'next/link';
 import { getAllPosts } from '@/lib/posts';
 import type { GetStaticPropsResult } from 'next';
