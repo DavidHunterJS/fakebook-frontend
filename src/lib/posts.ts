@@ -13,8 +13,8 @@ interface Post {
   content: string;
 }
 
-// 2. Get the path to the 'posts' directory
-const postsDirectory = path.join(__dirname, '..', '..', 'posts');
+// 2. Get the path to the 'posts' directory using process.cwd()
+const postsDirectory = path.join(process.cwd(), 'posts');
 
 // 3. Update the function to return a Promise of Post[]
 export async function getAllPosts(): Promise<Post[]> {
@@ -41,9 +41,9 @@ export async function getAllPosts(): Promise<Post[]> {
       const filePath = path.join(postsDirectory, filename);
       const fileContents = fs.readFileSync(filePath, 'utf8');
       
-      // --- THE FIX IS HERE ---
       const { data: rawData, content } = matter(fileContents);
-      const data = rawData as { title: string, date: string }; // Safely assert the 'data' object
+      // Safely assert the 'data' object
+      const data = rawData as { title: string, date: string }; 
       
       const processedContent = await remark().use(html).process(content);
       const htmlContent = processedContent.toString();
