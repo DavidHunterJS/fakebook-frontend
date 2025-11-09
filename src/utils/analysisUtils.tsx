@@ -1,3 +1,7 @@
+// src/utils/analysisUtils.ts
+import React, { useState } from 'react';
+import { Box, Typography, Collapse, Paper, Button } from '@mui/material';
+import { CheckCircle, Warning, Error as ErrorIcon } from '@mui/icons-material';
 import { ComplianceResult } from '../types/compliance';
 
 // --- Interface definitions (moved from component) ---
@@ -15,6 +19,84 @@ export interface CategorizedIssues {
   minor: Issue[];
 }
 
+// --- NEW SHARED COMPONENT: IssueSection ---
+// This is the powerful component moved from your checker.tsx
+export const IssueSection = ({ title, issues, type, expanded, onToggle }: {
+  title: string;
+  issues: Issue[];
+  type: 'critical' | 'warning' | 'passing';
+  expanded: boolean;
+  onToggle: () => void;
+}): React.ReactElement | null => {
+  if (issues.length === 0) return null;
+
+  const colors = {
+    critical: { bg: '#fef2f2', border: '#fecaca', text: '#991b1b', iconColor: '#dc2626' },
+    warning: { bg: '#fff7ed', border: '#fed7aa', text: '#c2410c', iconColor: '#ea580c' },
+    passing: { bg: '#f0fdf4', border: '#bbf7d0', text: '#166534', iconColor: '#16a34a' }
+  };
+  const SectionIcon = type === 'critical' || type === 'warning' ? Warning : CheckCircle;
+
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Button fullWidth onClick={onToggle} sx={{
+        display: 'flex', justifyContent: 'space-between', p: 1.5, textTransform: 'none',
+        bgcolor: '#e6f7f5', border: 'none', borderRadius: '30px',
+        boxShadow: '8px 8px 16px #c4d9d6, -8px -8px 16px #ffffff',
+        '&:hover': { bgcolor: '#e6f7f5', boxShadow: '4px 4px 8px #c4d9d6, -4px -4px 8px #ffffff' }
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <SectionIcon sx={{ color: colors[type].iconColor }} />
+          <Typography sx={{ fontWeight: 600, fontSize: '1.125rem', color: colors[type].text }}>
+            {title}
+          </Typography>
+        </Box>
+        <SectionIcon sx={{ color: colors[type].iconColor }} />
+      </Button>
+      <Collapse in={expanded}>
+        <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          {issues.map((issue, idx) => {
+            const IssueIcon = issue.status === 'fail' ? ErrorIcon : issue.status === 'warn' ? Warning : CheckCircle;
+            return (
+              <Paper key={idx} elevation={0} sx={{
+                p: 2,
+                borderLeft: `4px solid ${type === 'critical' ? '#ef4444' : type === 'warning' ? '#f97316' : '#10b981'}`,
+                bgcolor: colors[type].bg,
+                borderRadius: '0.5rem'
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                  <IssueIcon sx={{ fontSize: '1.25rem', color: colors[type].iconColor }} />
+                  <Typography sx={{ fontWeight: 600, color: '#111827' }}>
+                    {issue.name}
+                  </Typography>
+                   <Box sx={{
+                      display: 'inline-flex', alignItems: 'center', px: 0.75, py: 0.25, borderRadius: '0.25rem',
+                      fontSize: '0.75rem', fontWeight: 500, ml: 0.5,
+                      bgcolor: issue.status === 'fail' ? '#fee2e2' : issue.status === 'warn' ? '#ffedd5' : '#dcfce7',
+                      color: issue.status === 'fail' ? '#991b1b' : issue.status === 'warn' ? '#ea580c' : '#166534',
+                      border: `1px solid ${issue.status === 'fail' ? '#fca5a5' : issue.status === 'warn' ? '#fdba74' : '#86efac'}`
+                    }}>
+                      {issue.status === 'fail' ? 'FAIL' : issue.status === 'warn' ? 'WARN' : 'PASS'}
+                    </Box>
+                </Box>
+                <Typography variant="body2" sx={{ color: '#4b5563', fontWeight: 500, fontSize: '0.875rem' }}>
+                  {issue.value}
+                </Typography>
+                {issue.details && (
+                  <Typography variant="caption" sx={{ color: '#6b7280', fontSize: '0.75rem' }}>
+                    {issue.details}
+                  </Typography>
+                )}
+              </Paper>
+            );
+          })}
+        </Box>
+      </Collapse>
+    </Box>
+  );
+};
+
+
 /**
  * This is your 100% working function from ModernizedComplianceChecker.
  * It assumes a (Product=White, Background=Black) mask.
@@ -23,6 +105,7 @@ export async function processMaskForViolations(
   imageUrl: string,
   maskUrl: string
 ): Promise<string> {
+  // ... (Your existing processMaskForViolations code remains unchanged)
   console.log("processMaskForViolations FIRED!!!!! (from SHARED util)");
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas');
@@ -87,6 +170,7 @@ export async function processMaskForViolations(
  * This is your 100% working categorization function.
  */
 export const categorizeIssues = (data: ComplianceResult | null): CategorizedIssues => {
+  // ... (Your existing categorizeIssues code remains unchanged)
   if (!data) return { critical: [], important: [], minor: [] };
   
   const critical: Issue[] = [];

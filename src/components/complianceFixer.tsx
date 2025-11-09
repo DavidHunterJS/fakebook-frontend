@@ -10,30 +10,32 @@ import {
   Grid,
   Avatar,
   Chip,
-  Collapse,
 } from '@mui/material';
 import {
   CheckCircle,
-  Error as ErrorIcon,
   AutoFixHigh,
+  Download, 
 } from '@mui/icons-material';
 import type { ComplianceResult } from '../types/compliance';
 
-// Import the shared functions
+// Import the shared functions AND the IssueSection component
 import { 
   processMaskForViolations, 
   categorizeIssues,
-  type Issue
-} from '../utils/analysisUtils';
+  IssueSection 
+} from '../utils/analysisUtils'; 
 
 // --- Props Interface ---
 export interface ComplianceFixerProps {
   originalImageUrl: string;
   complianceData: ComplianceResult;
   onBack: () => void;
-  violationOverlayUrl: string | null; // The original image with red dots
+  violationOverlayUrl: string | null; 
   cutoutImageUrl: string | undefined;
-  onFixSuccess: () => void | Promise<void>; // This deducts the credit
+  onFixSuccess: () => void | Promise<void>; 
+  
+  // This prop is needed for the download filename
+  originalFileName: string | null; 
 }
 
 // --- Helper Types ---
@@ -70,7 +72,6 @@ async function loadImageAsDataUrl(imageUrl: string): Promise<string> {
     const img = new Image();
     img.crossOrigin = 'Anonymous';
     
-    // Add timeout
     const timeout = setTimeout(() => {
       console.error('❌ [loadImageAsDataUrl] Timeout loading image');
       reject(new Error('Image load timeout'));
@@ -100,64 +101,6 @@ async function loadImageAsDataUrl(imageUrl: string): Promise<string> {
 }
 
 
-// --- HELPER COMPONENT: IssueSection ---
-const IssueSection: React.FC<{ title: string; issues: Issue[]; type: 'critical' }> = ({
-  title,
-  issues,
-}) => {
-  const isOpen = true; 
-  const colors = { bg: '#fef2f2', text: '#991b1b', iconColor: '#dc2626' };
-  
-  // Filter out 'pass' status issues
-  const issuesToDisplay = issues.filter(issue => issue.status !== 'pass');
-
-  return (
-    <Box sx={{ mt: 2 }}>
-      <Typography sx={{ fontWeight: 600, fontSize: '1rem', color: colors.text }}>
-        {title}
-      </Typography>
-      <Collapse in={isOpen}>
-        <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-          {issuesToDisplay.length === 0 ? (
-             <Paper elevation={0} sx={{ p: 2, bgcolor: '#f0fdf4', borderLeft: '4px solid #10b981' }}>
-               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                 <CheckCircle sx={{ fontSize: '1.25rem', color: '#16a34a' }} />
-                 <Typography sx={{ fontWeight: 600, color: '#14532d' }}>
-                   No critical issues found
-                 </Typography>
-               </Box>
-             </Paper>
-          ) : (
-            issuesToDisplay.map((issue, idx) => (
-              <Paper
-                key={idx}
-                elevation={0}
-                sx={{
-                  p: 2,
-                  borderLeft: `4px solid ${issue.status === 'fail' ? '#ef4444' : '#f97316'}`,
-                  bgcolor: issue.status === 'fail' ? colors.bg : '#fff7ed',
-                  borderRadius: '0.5rem',
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                  <ErrorIcon sx={{ fontSize: '1.25rem', color: colors.iconColor }} />
-                  <Typography sx={{ fontWeight: 600, color: '#111827' }}>
-                    {issue.name}
-                  </Typography>
-                </Box>
-                <Typography variant="body2" sx={{ color: '#4b5563', fontWeight: 500, fontSize: '0.875rem' }}>
-                  {issue.value}
-                </Typography>
-              </Paper>
-            ))
-          )}
-        </Box>
-      </Collapse>
-    </Box>
-  );
-};
-
-
 // --- Main Component ---
 const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
   const [fixerState, setFixerState] = useState<FixerState>('idle');
@@ -165,13 +108,30 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
   const [fixedImageUrl, setFixedImageUrl] = useState<string | null>(null);
   const [fixedImageOverlayUrl, setFixedImageOverlayUrl] = useState<string | null>(null);
   const [reCheckResult, setReCheckResult] = useState<ComplianceResult | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
-  const { critical } = categorizeIssues(props.complianceData);
+  // Add state for expanded sections
+  const [expandedSections, setExpandedSections] = useState({
+    critical: true,
+    warning: true,
+    passing: false,
+  });
+  const handleToggle = (section: 'critical' | 'warning' | 'passing') => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  // Get all original issues
+  const { 
+    critical: originalCritical, 
+    important: originalImportant, 
+    minor: originalMinor 
+  } = categorizeIssues(props.complianceData);
+
   const fixesToApply: string[] = [];
-  if (critical.some((issue) => issue.name === 'White Background' && issue.status === 'fail')) {
+  if (originalCritical.some((issue) => issue.name === 'White Background' && issue.status === 'fail')) {
     fixesToApply.push('background');
   }
-  if (critical.some((issue) => issue.name === 'Image Size' && issue.status === 'fail')) {
+  if (originalCritical.some((issue) => issue.name === 'Image Size' && issue.status === 'fail')) {
     fixesToApply.push('resize');
   }
 
@@ -187,9 +147,6 @@ const handleFixAndReAnalyze = async () => {
     try {
       // --- STEP 1: FIX THE IMAGE ---
       console.log('📤 [FIXER] Step 1: Sending fix request...');
-      console.log('   - cutoutImageUrl:', props.cutoutImageUrl);
-      console.log('   - fixesToApply:', fixesToApply);
-      console.log('   - dimensions:', props.complianceData.dimensions);
       
       const fixResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_BASE_URL}/api/fix-image`, {
         method: 'POST',
@@ -201,8 +158,6 @@ const handleFixAndReAnalyze = async () => {
           dimensions: props.complianceData.dimensions,
         }),
       });
-
-      console.log('📥 [FIXER] Fix response status:', fixResponse.status);
       
       if (!fixResponse.ok) {
         const errorData = await fixResponse.json().catch(() => ({ error: 'Unknown error' }));
@@ -211,25 +166,20 @@ const handleFixAndReAnalyze = async () => {
       }
 
       const fixData = await fixResponse.json();
-      console.log('📦 [FIXER] Fix response data:', fixData);
       fixedUrl = fixData.fixedUrl; 
       console.log('✅ [FIXER] Step 1 Success. Fixed URL:', fixedUrl);
       setFixedImageUrl(fixedUrl);
       
-      // DON'T call onFixSuccess yet - it causes parent re-render which unmounts us!
-      // We'll call it at the very end after setting all state
-
       // --- STEP 2: RE-ANALYZE THE FIXED IMAGE ---
       console.log('📤 [FIXER] Step 2: Re-analyzing fixed image...');
       setFixerState('rechecking');
-      const absoluteUrl = fixedUrl;
 
       const analyzeResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_BASE_URL}/api/analyze-image`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ 
-          imageUrl: absoluteUrl, 
+          imageUrl: fixedUrl, 
           skipCreditDeduction: true 
         }),
       });
@@ -245,16 +195,12 @@ const handleFixAndReAnalyze = async () => {
 
       // --- STEP 3: CREATE NEW OVERLAY (RED DOTS) ---
       console.log('🔍 [FIXER] Step 3: Creating overlay image...');
-      console.log('   - Fixed URL:', fixedUrl);
-      console.log('   - Segmentation URL:', analysisData.segmentationUrl);
-      console.log('   - Non-white pixels:', analysisData.nonWhitePixels);
       
       if (analysisData.segmentationUrl && analysisData.nonWhitePixels > 0) {
         // This case handles if the fix *failed* (there are still violations)
         console.log('⚠️ [FIXER] Re-analysis has violations, creating red-dot overlay...');
         try {
           const overlay = await processMaskForViolations(fixedUrl, analysisData.segmentationUrl);
-          console.log('✅ [FIXER] Overlay created successfully, length:', overlay.length);
           setFixedImageOverlayUrl(overlay);
         } catch (err) {
           console.error('❌ [FIXER] Failed to create overlay, falling back to data URL:', err);
@@ -266,37 +212,69 @@ const handleFixAndReAnalyze = async () => {
         console.log('✅ [FIXER] Re-analysis passed! Converting to data URL to bypass CORS...');
         try {
           const dataUrl = await loadImageAsDataUrl(fixedUrl);
-          console.log('✅ [FIXER] Data URL created successfully, length:', dataUrl.length);
           setFixedImageOverlayUrl(dataUrl);
         } catch (err) {
           console.error('❌ [FIXER] Failed to create data URL:', err);
-          // Last resort: try using the URL directly
-          console.log('⚠️ [FIXER] Using URL directly as fallback');
-          setFixedImageOverlayUrl(fixedUrl);
+          setFixedImageOverlayUrl(fixedUrl); // Fallback
         }
       }
 
       console.log('🎉 [FIXER] All steps complete! Setting state to success.');
       setFixerState('success');
 
-      // Don't call onFixSuccess here - it will be called when user navigates back
-      // This prevents parent re-renders from unmounting this component
-
-    } catch (error: unknown) { // <-- FIX IS HERE
+    } catch (error: unknown) {
       console.error('❌ [FIXER] Error in fix/re-analyze process:', error);
-      
-      // Type-safe error handling
       let message = 'An unknown error occurred.';
-      if (error instanceof Error) {
-        message = error.message;
-      } else if (typeof error === 'string') {
-        message = error;
-      }
-      
+      if (error instanceof Error) message = error.message;
+      else if (typeof error === 'string') message = error;
       setErrorMessage(message);
       setFixerState('error');
     }
   };
+
+  /**
+   * Securely downloads the cross-origin image from S3.
+   */
+  const handleDownload = async () => {
+    if (!fixedImageUrl) return;
+
+    setIsDownloading(true);
+    setErrorMessage(null); // Clear any previous errors
+
+    try {
+      const response = await fetch(fixedImageUrl);
+      if (!response.ok) {
+        throw new Error(`Network response was not ok: ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Use the prop to create the new filename
+      const fileName = props.originalFileName 
+        ? `fixed-${props.originalFileName}` 
+        : 'compliancekit-fixed-image.png'; // Fallback name
+      link.download = fileName; 
+      
+      document.body.appendChild(link);
+      link.click(); 
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+    } catch (err) {
+      console.error('Download failed:', err);
+      if (err instanceof Error) {
+        setErrorMessage(`Download failed: ${err.message}`);
+      } else {
+        setErrorMessage('An unknown download error occurred.');
+      }
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+  
   // --- UI RENDER ---
   
   const renderStateContent = () => {
@@ -312,16 +290,32 @@ const handleFixAndReAnalyze = async () => {
             </Typography>
           </Box>
         );
+        
       case 'success':
         return (
-           <Chip 
-             icon={<CheckCircle />} 
-             label="All issues fixed and verified!" 
-             color="success" 
-           />
+          <Button
+            variant="contained"
+            onClick={handleDownload}
+            disabled={isDownloading}
+            startIcon={isDownloading ? <CircularProgress size={20} color="inherit" /> : <Download />}
+            sx={{
+              bgcolor: theme.primary,
+              color: 'white',
+              py: 1.5,
+              px: 3,
+              fontWeight: 600,
+              borderRadius: '50px',
+              boxShadow: theme.shadowOuter,
+              '&:hover': { bgcolor: theme.primaryDark },
+              '&:disabled': { bgcolor: 'grey.500', boxShadow: 'none' }
+            }}
+          >
+            {isDownloading ? 'Downloading...' : 'Download Fixed Image'}
+          </Button>
         );
+        
       case 'error':
-        return <Typography color="error" variant="body2">Error: {errorMessage}</Typography>;
+        return <Typography color="error" variant="body2">{errorMessage}</Typography>;
       case 'idle':
       default:
         return (
@@ -358,6 +352,13 @@ const handleFixAndReAnalyze = async () => {
   console.log('Error:', errorMessage);
   console.log('---------------------------');
 
+  // Get all categories from the re-check result
+  const { 
+    critical: newCritical, 
+    important: newImportant, 
+    minor: newMinor 
+  } = categorizeIssues(reCheckResult);
+
   return (
     <Box>
       {/* Header */}
@@ -374,7 +375,7 @@ const handleFixAndReAnalyze = async () => {
       {/* Comparison View */}
       <Grid container spacing={3}>
         {/* Original Image */}
-        <Grid size={{xs:12, md:6}}>
+        <Grid size={{xs:12,md:6}} >
           <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: theme.darkShadow, borderRadius: '16px', height: '100%' }}>
             <Typography variant="h6" color={theme.textSecondary} gutterBottom>Before</Typography>
             <Box
@@ -383,12 +384,34 @@ const handleFixAndReAnalyze = async () => {
               alt="Original Image"
               sx={{ width: '100%', borderRadius: '8px', border: `1px solid ${theme.darkShadow}` }}
             />
-            <IssueSection title="Original Issues" issues={critical} type="critical" />
+            
+            {/* --- RENDER ALL ORIGINAL ISSUES --- */}
+            <IssueSection 
+              title={`Critical Issues (${originalCritical.length})`} 
+              issues={originalCritical} 
+              type="critical" 
+              expanded={expandedSections.critical} 
+              onToggle={() => handleToggle('critical')} 
+            />
+            <IssueSection 
+              title={`Warnings (${originalImportant.length})`} 
+              issues={originalImportant} 
+              type="warning" 
+              expanded={expandedSections.warning} 
+              onToggle={() => handleToggle('warning')} 
+            />
+            <IssueSection 
+              title={`Passing Requirements (${originalMinor.length})`} 
+              issues={originalMinor} 
+              type="passing" 
+              expanded={expandedSections.passing} 
+              onToggle={() => handleToggle('passing')} 
+            />
           </Paper>
         </Grid>
         
         {/* Fixed Image */}
-        <Grid size={{xs:12, md:6}}>
+        <Grid size={{xs:12,md:6}} >
           <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: theme.darkShadow, borderRadius: '16px', height: '100%' }}>
             <Typography variant="h6" color={theme.textSecondary} gutterBottom>After</Typography>
             
@@ -425,11 +448,30 @@ const handleFixAndReAnalyze = async () => {
             
             {/* Show the NEW issue list for the fixed image */}
             {reCheckResult && (
-              <IssueSection 
-                title="New Issues" 
-                issues={categorizeIssues(reCheckResult).critical} 
-                type="critical" 
-              />
+              <>
+                {/* --- RENDER ALL NEW ISSUES --- */}
+                <IssueSection 
+                  title={`New Critical Issues (${newCritical.length})`} 
+                  issues={newCritical} 
+                  type="critical" 
+                  expanded={expandedSections.critical} 
+                  onToggle={() => handleToggle('critical')} 
+                />
+                <IssueSection 
+                  title={`New Warnings (${newImportant.length})`} 
+                  issues={newImportant} 
+                  type="warning" 
+                  expanded={expandedSections.warning} 
+                  onToggle={() => handleToggle('warning')} 
+                />
+                <IssueSection 
+                  title={`New Passing Requirements (${newMinor.length})`} 
+                  issues={newMinor} 
+                  type="passing" 
+                  expanded={expandedSections.passing} 
+                  onToggle={() => handleToggle('passing')} 
+                />
+              </>
             )}
           </Paper>
         </Grid>
