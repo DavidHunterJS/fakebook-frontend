@@ -117,8 +117,6 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
 
   const { 
     critical: originalCritical, 
-    important: originalImportant, 
-    minor: originalMinor 
   } = categorizeIssues(props.complianceData);
 
   const fixesToApply: string[] = [];

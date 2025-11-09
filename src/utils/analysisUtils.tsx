@@ -1,5 +1,5 @@
 // src/utils/analysisUtils.ts
-import React, { useState } from 'react';
+import React from 'react';
 import { Box, Typography, Collapse, Paper, Button } from '@mui/material';
 import { CheckCircle, Warning, Error as ErrorIcon } from '@mui/icons-material';
 import { ComplianceResult } from '../types/compliance';
