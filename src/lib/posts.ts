@@ -6,7 +6,7 @@ import { remark } from 'remark';
 import html from 'remark-html';
 
 export async function getAllPosts() {
-  const postsDirectory = path.join(process.cwd(), 'posts');
+  const postsDirectory = path.join(process.cwd(), 'src/posts');
   
   // Check if the directory exists
   if (!fs.existsSync(postsDirectory)) {
