@@ -5,24 +5,33 @@ import matter from 'gray-matter';
 import { remark } from 'remark';
 import html from 'remark-html';
 
+// 1. Get the path to the 'posts' directory
+// __dirname is the path to the current directory (src/lib)
+// We go up two levels ('..', '..') to get to the project root
+// Then we join that with 'posts'
+const postsDirectory = path.join(__dirname, '..', '..', 'posts');
+
 export async function getAllPosts() {
-  const postsDirectory = path.join(process.cwd(), 'src/posts');
-  console.log(`CWD: `, process.cwd())
-  // Check if the directory exists
-  if (!fs.existsSync(postsDirectory)) {
-    console.warn('Posts directory not found, returning empty array');
-    return [];
-  }
-  
-  const filenames = fs.readdirSync(postsDirectory);
-  
-  // Return empty array if no files
-  if (filenames.length === 0) {
+  let filenames: string[];
+  try {
+    // Check if the directory exists
+    if (!fs.existsSync(postsDirectory)) {
+      console.warn(`'posts' directory not found at: ${postsDirectory}`);
+      return [];
+    }
+    filenames = fs.readdirSync(postsDirectory);
+  } catch (err) {
+    console.error('Could not read posts directory:', err);
     return [];
   }
   
   const posts = await Promise.all(
     filenames.map(async (filename) => {
+      // 2. Make sure we only process markdown files
+      if (!filename.endsWith('.md')) {
+        return null;
+      }
+
       const filePath = path.join(postsDirectory, filename);
       const fileContents = fs.readFileSync(filePath, 'utf8');
       const { data, content } = matter(fileContents);
@@ -39,7 +48,10 @@ export async function getAllPosts() {
     })
   );
   
-  return posts.sort((a, b) => (a.date < b.date ? 1 : -1));
+  // 3. Filter out any null entries (from non-markdown files)
+  const validPosts = posts.filter(post => post !== null) as any[];
+
+  return validPosts.sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
 export async function getPostBySlug(slug: string) {
