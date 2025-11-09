@@ -2,11 +2,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Box, Typography, Button, Card,  Chip, Avatar,  
-   AppBar, Toolbar, Container, Paper,
-  CircularProgress,  Fab
+   AppBar, Toolbar, Container, Paper,  Collapse,
+  CircularProgress,  Fab,
+  Divider, Link as MuiLink // <-- 1. ADDED Divider and MuiLink
 } from '@mui/material';
 import {
-  CloudUpload, CheckCircle,  Error as ErrorIcon,
+  CloudUpload, CheckCircle, Warning, Error as ErrorIcon,
   PhotoCamera, AutoFixHigh, ArrowForward, Info, 
     
 } from '@mui/icons-material';
@@ -380,7 +381,6 @@ const ModernizedComplianceChecker: React.FC = () => {
         </Typography>
       </Box>
 
-      {/* --- THIS IS THE FIX --- */}
       {/* This will now display file size or type errors */}
       {errorMessage && (
         <Typography 
@@ -391,7 +391,6 @@ const ModernizedComplianceChecker: React.FC = () => {
           {errorMessage}
         </Typography>
       )}
-      {/* ----------------------- */}
 
       {/* Updated Upload Box (Neomorphic Inset) */}
       <Box 
@@ -494,7 +493,6 @@ const ModernizedComplianceChecker: React.FC = () => {
 
   // --- ResultsDisplay (Unchanged) ---
   const ResultsDisplay = ({ onFixIssuesClick }: { onFixIssuesClick: () => void }) => {
-    console.log("2. ResultsDisplay received onFixIssuesClick prop:", typeof onFixIssuesClick);
     const { critical, important, minor } = categorizeIssues(complianceData);
     const totalIssues = critical.length + important.length;
 
@@ -798,51 +796,115 @@ const ModernizedComplianceChecker: React.FC = () => {
     }
   };
 
+  // --- 2. CREATE THE FOOTER COMPONENT ---
+  const Footer = () => (
+    <Box 
+      component="footer" 
+      sx={{ 
+        mt: 'auto', // Pushes footer to the bottom if content is short
+        py: 4, 
+        px: 2, 
+        bgcolor: theme.bgColor, // Use your theme's background
+      }}
+    >
+      <Container maxWidth="lg">
+        <Divider sx={{ mb: 3, borderColor: theme.darkShadow }} />
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            flexDirection: { xs: 'column', sm: 'row' }, 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            gap: 2 
+          }}
+        >
+          <Typography 
+            variant="body2" 
+            sx={{ color: theme.textSecondary, fontWeight: 500 }}
+          >
+            © {new Date().getFullYear()} ComplianceKit. All rights reserved.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 3 }}>
+            <MuiLink 
+              href="/terms" 
+              underline="hover" 
+              sx={{ color: theme.textSecondary, fontWeight: 500 }}
+            >
+              Terms
+            </MuiLink>
+            <MuiLink 
+              href="/privacy" 
+              underline="hover" 
+              sx={{ color: theme.textSecondary, fontWeight: 500 }}
+            >
+              Privacy
+            </MuiLink>
+            <MuiLink 
+              href="mailto:support@compliancekit.app" 
+              underline="hover" 
+              sx={{ color: theme.textSecondary, fontWeight: 500 }}
+            >
+              Support
+            </MuiLink>
+          </Box>
+        </Box>
+      </Container>
+    </Box>
+  );
+
   // --- Main Render Logic ---
+
   return (
     <Box sx={{ 
       background: theme.bgColor, // Use theme background
       minHeight: '100vh',
       position: 'relative',
+      display: 'flex', // Added to make footer stick to bottom
+      flexDirection: 'column' // Added to make footer stick to bottom
     }}>
-    <Header />
-    <Container maxWidth="lg" component="main" sx={{ py: 6, position: 'relative' }}>
-      {checkerState === 'upload' ? (
-         <MainContentArea />
-      ) : (
-        <Paper 
-          elevation={0}
-          sx={{
-            p: { xs: 2, sm: 4 },
-            bgcolor: theme.bgColor,
-            borderRadius: '30px',
-            boxShadow: theme.shadowOuter
-          }}
-        >
+      <Header />
+      <Container maxWidth="lg" component="main" sx={{ py: 6, position: 'relative', flexGrow: 1 }}> {/* Added flexGrow */}
+        {/* Wrap content in a Box to center it and apply neomorphic style if it's not the upload page */}
+        {checkerState === 'upload' ? (
           <MainContentArea />
-        </Paper>
+        ) : (
+          <Paper 
+            elevation={0}
+            sx={{
+              p: { xs: 2, sm: 4 },
+              bgcolor: theme.bgColor,
+              borderRadius: '30px',
+              boxShadow: theme.shadowOuter
+            }}
+          >
+            <MainContentArea />
+          </Paper>
+        )}
+      </Container>
+      
+      {checkerState !== 'upload' && (
+        <Fab 
+          variant="extended" 
+          sx={{ 
+            position: 'fixed', 
+            bottom: 24, 
+            right: 24, 
+            bgcolor: theme.primary, // Use theme color
+            color: 'white', 
+            '&:hover': { bgcolor: theme.primaryDark },
+            boxShadow: theme.shadowOuterSm, // Add shadow
+            borderRadius: '50px'
+          }} 
+          onClick={handleResetAll}
+        >
+          <PhotoCamera sx={{ mr: 1 }} />
+          Check Another
+        </Fab>
       )}
-    </Container>
-    
-    {checkerState !== 'upload' && (
-      <Fab 
-        variant="extended" 
-        sx={{ 
-          position: 'fixed', 
-          bottom: 24, 
-          right: 24, 
-          bgcolor: theme.primary, // Use theme color
-          color: 'white', 
-          '&:hover': { bgcolor: theme.primaryDark },
-          boxShadow: theme.shadowOuterSm, // Add shadow
-          borderRadius: '50px'
-        }} 
-        onClick={handleResetAll}
-      >
-        <PhotoCamera sx={{ mr: 1 }} />
-        Check Another
-      </Fab>
-    )}
+      
+      {/* 3. ADD THE FOOTER COMPONENT HERE */}
+      <Footer />
+      
     </Box>
   );
 };
