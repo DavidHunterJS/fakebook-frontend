@@ -2,11 +2,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Box, Typography, Button, Card,  Chip, Avatar,  
-   AppBar, Toolbar, Container, Paper,  Collapse,
+   AppBar, Toolbar, Container, Paper,
   CircularProgress,  Fab
 } from '@mui/material';
 import {
-  CloudUpload, CheckCircle, Warning, Error as ErrorIcon,
+  CloudUpload, CheckCircle,  Error as ErrorIcon,
   PhotoCamera, AutoFixHigh, ArrowForward, Info, 
     
 } from '@mui/icons-material';
