@@ -5,13 +5,19 @@ import matter from 'gray-matter';
 import { remark } from 'remark';
 import html from 'remark-html';
 
-// 1. Get the path to the 'posts' directory
-// __dirname is the path to the current directory (src/lib)
-// We go up two levels ('..', '..') to get to the project root
-// Then we join that with 'posts'
+// 1. Define the Post type
+interface Post {
+  slug: string;
+  title: string;
+  date: string;
+  content: string;
+}
+
+// 2. Get the path to the 'posts' directory
 const postsDirectory = path.join(__dirname, '..', '..', 'posts');
 
-export async function getAllPosts() {
+// 3. Update the function to return a Promise of Post[]
+export async function getAllPosts(): Promise<Post[]> {
   let filenames: string[];
   try {
     // Check if the directory exists
@@ -25,16 +31,19 @@ export async function getAllPosts() {
     return [];
   }
   
+  // 4. This map now returns Promise<Post | null>
   const posts = await Promise.all(
     filenames.map(async (filename) => {
-      // 2. Make sure we only process markdown files
       if (!filename.endsWith('.md')) {
         return null;
       }
 
       const filePath = path.join(postsDirectory, filename);
       const fileContents = fs.readFileSync(filePath, 'utf8');
-      const { data, content } = matter(fileContents);
+      
+      // --- THE FIX IS HERE ---
+      const { data: rawData, content } = matter(fileContents);
+      const data = rawData as { title: string, date: string }; // Safely assert the 'data' object
       
       const processedContent = await remark().use(html).process(content);
       const htmlContent = processedContent.toString();
@@ -48,13 +57,15 @@ export async function getAllPosts() {
     })
   );
   
-  // 3. Filter out any null entries (from non-markdown files)
-  const validPosts = posts.filter(post => post !== null) as any[];
+  // 6. Use a type guard to filter out nulls AND set the correct type
+  const validPosts = posts.filter((post): post is Post => post !== null);
 
-  return validPosts.sort((a, b) => (a.date < b.date ? 1 : -1));
+  // 7. Type the sort function parameters
+  return validPosts.sort((a: Post, b: Post) => (a.date < b.date ? 1 : -1));
 }
 
-export async function getPostBySlug(slug: string) {
+// 8. Update the return type here as well
+export async function getPostBySlug(slug: string): Promise<Post | undefined> {
   const posts = await getAllPosts();
   return posts.find(post => post.slug === slug);
 }
