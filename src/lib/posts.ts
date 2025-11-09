@@ -13,7 +13,8 @@ interface Post {
   content: string;
 }
 
-// 2. Get the path to the 'posts' directory using process.cwd()
+// 2. THIS IS THE FIX:
+// Use process.cwd() to get the project's root directory
 const postsDirectory = path.join(process.cwd(), 'posts');
 
 // 3. Update the function to return a Promise of Post[]
