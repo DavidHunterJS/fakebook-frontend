@@ -7,7 +7,7 @@ import html from 'remark-html';
 
 export async function getAllPosts() {
   const postsDirectory = path.join(process.cwd(), 'src/posts');
-  
+  console.log(`CWD: `, process.cwd())
   // Check if the directory exists
   if (!fs.existsSync(postsDirectory)) {
     console.warn('Posts directory not found, returning empty array');
