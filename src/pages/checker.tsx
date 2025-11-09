@@ -2,14 +2,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Box, Typography, Button, Card,  Chip, Avatar,  
-   AppBar, Toolbar, Container, Paper, 
+   AppBar, Toolbar, Container, Paper,  Collapse,
   CircularProgress,  Fab,
-  Divider, Link as MuiLink // <-- 1. ADDED Divider and MuiLink
+  Divider, Link as MuiLink 
 } from '@mui/material';
 import {
-  CloudUpload, CheckCircle, Error as ErrorIcon,
+  CloudUpload, CheckCircle, Warning, Error as ErrorIcon,
   PhotoCamera, AutoFixHigh, ArrowForward, Info, 
-    
+  Settings // <-- 1. IMPORTED THE GEAR ICON
 } from '@mui/icons-material';
 
 // --- (IMPORTANT) Make sure to import your actual API function ---
@@ -17,16 +17,15 @@ import { uploadImage } from '../utils/api';
 import { analytics } from '../utils/analytics';
 import ComplianceFixer from '../components/complianceFixer';
 import type { ComplianceResult } from '../types/compliance';
-
-// --- (This is the key change from our previous conversation) ---
 import { 
   processMaskForViolations, 
   categorizeIssues,
-  IssueSection // <-- We now import the shared IssueSection component
+  IssueSection 
 } from '../utils/analysisUtils';
 
 // 👇 --- IMPORT YOUR CUSTOM HOOK ---
 import { useSubscription } from '../hooks/useSubscription';
+import { SubscriptionData } from '@/types/subscriptions.types.js'; // Adjust path if needed
 
 // --- Neomorphic Theme Constants (from compliance-kit.tsx) ---
 const theme = {
@@ -48,6 +47,11 @@ const theme = {
 
 type CheckerState = 'upload' | 'processing' | 'results' | 'error' | 'fixing';
 
+// --- (2. DEFINE PROPS FOR THE HEADER) ---
+interface HeaderProps {
+  subscription: SubscriptionData | null;
+}
+
 // --- Main Component ---
 const ModernizedComplianceChecker: React.FC = () => {
   // --- State and Refs ---
@@ -68,7 +72,7 @@ const ModernizedComplianceChecker: React.FC = () => {
   const [originalFileName, setOriginalFileName] = useState<string | null>(null);
   
   const { 
-    subscription, 
+    subscription, // <-- This is what we'll pass to the header
     isLoading: isLoadingCredits, 
     error: creditError, 
     refetch: refetchCredits,
@@ -243,55 +247,91 @@ const ModernizedComplianceChecker: React.FC = () => {
   
 
   // --- UI Sub-components ---
-  const Header = () => (
-    <AppBar 
-      position="sticky" 
-      elevation={0}
-      sx={{ 
-        bgcolor: theme.bgColor, 
-        boxShadow: theme.shadowOuterSm,
-      }}
-    >
-      <Container maxWidth="lg">
-        <Toolbar disableGutters sx={{ height: '64px' }}>
-          <Typography
-            variant="h6"
-            component="div"
-            sx={{
-              flexGrow: 1,
-              fontSize: '1.8rem',
-              fontWeight: 700,
-              color: theme.textPrimary,
-            }}
-          >
-            Compliance
+  
+  // --- (3. UPDATE THE HEADER COMPONENT TO ACCEPT PROPS) ---
+  const Header: React.FC<HeaderProps> = ({ subscription }) => {
+    // Check if the user has a paid plan
+    const hasPaidPlan = subscription && (subscription.tier === 'Basic' || subscription.tier === 'Pro');
+    
+    return (
+      <AppBar 
+        position="sticky" 
+        elevation={0}
+        sx={{ 
+          bgcolor: theme.bgColor, 
+          boxShadow: theme.shadowOuterSm,
+        }}
+      >
+        <Container maxWidth="lg">
+          <Toolbar disableGutters sx={{ height: '64px' }}>
+            {/* Logo matching compliance-kit.tsx */}
             <Typography
-              component="span"
-              sx={{ 
-                fontSize: '1.8rem', 
-                fontWeight: 700, 
-                color: theme.primary 
+              variant="h6"
+              component="div"
+              sx={{
+                flexGrow: 1,
+                fontSize: '1.8rem',
+                fontWeight: 700,
+                color: theme.textPrimary,
               }}
             >
-              Kit
+              Compliance
+              <Typography
+                component="span"
+                sx={{ 
+                  fontSize: '1.8rem', 
+                  fontWeight: 700, 
+                  color: theme.primary 
+                }}
+              >
+                Kit
+              </Typography>
             </Typography>
-          </Typography>
-          <Chip 
-            label="Beta" 
-            size="small" 
-            sx={{ 
-              background: theme.primary,
-              color: 'white',
-              fontWeight: 600,
-              px: 1
-            }} 
-          />
-        </Toolbar>
-      </Container>
-    </AppBar>
-  );
+            
+            {/* --- (4. ADD CONDITIONAL BUTTON/PILL) --- */}
+            {hasPaidPlan && (
+              <Chip 
+                label="Manage"
+                icon={<Settings sx={{ fontSize: '1rem', color: 'white', ml: '6px' }} />}
+                size="small" 
+                component="a" // Makes it a link
+                href="https://billing.stripe.com/p/login/4gM6oJ5WS96ngkc5h14Ni00"
+                target="_blank" // Open in new tab
+                rel="noopener noreferrer"
+                clickable
+                sx={{ 
+                  background: theme.primary,
+                  color: 'white',
+                  fontWeight: 600,
+                  px: 1,
+                  mr: 1, // Add margin to separate from Beta chip
+                  transition: 'opacity 0.2s',
+                  '&:hover': {
+                    opacity: 0.8,
+                    bgcolor: theme.primaryDark
+                  }
+                }} 
+              />
+            )}
+            
+            <Chip 
+              label="Beta" 
+              size="small" 
+              sx={{ 
+                background: theme.primary,
+                color: 'white',
+                fontWeight: 600,
+                px: 1
+              }} 
+            />
+          </Toolbar>
+        </Container>
+      </AppBar>
+    );
+  };
 
   const ProcessingState: React.FC = () => {
+    // ... (This component is unchanged) ...
     const steps = [
       "Uploading to secure storage", 
       "Analyzing image with AI", 
@@ -352,6 +392,7 @@ const ModernizedComplianceChecker: React.FC = () => {
   };
 
   const UploadArea = () => (
+    // ... (This component is unchanged) ...
     <Box sx={{ p: { xs: 2, sm: 4 }, textAlign: 'center' }}>
       <input 
         type="file" 
@@ -381,7 +422,6 @@ const ModernizedComplianceChecker: React.FC = () => {
         </Typography>
       </Box>
 
-      {/* This will now display file size or type errors */}
       {errorMessage && (
         <Typography 
           color="error" 
@@ -862,7 +902,9 @@ const ModernizedComplianceChecker: React.FC = () => {
       display: 'flex', // Added to make footer stick to bottom
       flexDirection: 'column' // Added to make footer stick to bottom
     }}>
-      <Header />
+      {/* --- (5. PASS THE SUBSCRIPTION OBJECT TO THE HEADER) --- */}
+      <Header subscription={subscription} />
+      
       <Container maxWidth="lg" component="main" sx={{ py: 6, position: 'relative', flexGrow: 1 }}> {/* Added flexGrow */}
         {/* Wrap content in a Box to center it and apply neomorphic style if it's not the upload page */}
         {checkerState === 'upload' ? (
@@ -902,7 +944,6 @@ const ModernizedComplianceChecker: React.FC = () => {
         </Fab>
       )}
       
-      {/* 3. ADD THE FOOTER COMPONENT HERE */}
       <Footer />
       
     </Box>
