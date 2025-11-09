@@ -118,8 +118,6 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
   // The ORIGINAL issues are only needed to determine `fixesToApply`
   const { 
     critical: originalCritical, 
-    important: originalImportant, 
-    minor: originalMinor 
   } = categorizeIssues(props.complianceData); // No originalNonWhitePixels needed here yet
 
   const fixesToApply: string[] = [];
