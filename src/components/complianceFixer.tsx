@@ -28,7 +28,7 @@ import {
 // --- Props Interface ---
 export interface ComplianceFixerProps {
   originalImageUrl: string;
-  complianceData: ComplianceResult;
+  complianceData: ComplianceResult; // This contains the *original* analysis result
   onBack: () => void;
   violationOverlayUrl: string | null; 
   cutoutImageUrl: string | undefined;
@@ -115,9 +115,12 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
+  // The ORIGINAL issues are only needed to determine `fixesToApply`
   const { 
     critical: originalCritical, 
-  } = categorizeIssues(props.complianceData);
+    important: originalImportant, 
+    minor: originalMinor 
+  } = categorizeIssues(props.complianceData); // No originalNonWhitePixels needed here yet
 
   const fixesToApply: string[] = [];
   if (originalCritical.some((issue) => issue.name === 'White Background' && issue.status === 'fail')) {
@@ -187,6 +190,7 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
       // --- STEP 3: CREATE NEW OVERLAY (RED DOTS) ---
       console.log('🔍 [FIXER] Step 3: Creating overlay image...');
       
+      // We still use analysisData.nonWhitePixels > 0 here to decide if an overlay is needed
       if (analysisData.segmentationUrl && analysisData.nonWhitePixels > 0) {
         console.log('⚠️ [FIXER] Re-analysis has violations, creating red-dot overlay...');
         try {
@@ -223,13 +227,13 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
 
   useEffect(() => {
     handleFixAndReAnalyze();
-  }, []); // Runs on component mount
+  }, []); 
 
   const handleDownload = async () => {
     if (!fixedImageUrl) return;
 
     setIsDownloading(true);
-    setDownloadError(null); // Clear previous download errors
+    setDownloadError(null); 
 
     try {
       const response = await fetch(fixedImageUrl);
@@ -267,7 +271,6 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
   // --- UI RENDER ---
   
   const renderStateContent = () => {
-    // This function now only controls the bottom action bar
     switch (fixerState) {
       case 'idle':
       case 'fixing':
@@ -290,7 +293,6 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
         );
         
       case 'success':
-        // The download button is no longer here, so we show a success chip
         return (
            <Chip 
              icon={<CheckCircle />} 
@@ -300,20 +302,20 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
         );
         
       case 'error':
-        // This only shows the *main fix error*, not download errors
         return <Typography color="error" variant="body2">{errorMessage}</Typography>;
       
       default:
-        return null; // All states are handled
+        return null; 
     }
   };
 
   // Get all categories from the re-check result
+  // --- IMPORTANT CHANGE HERE: Pass originalNonWhitePixels to categorizeIssues ---
   const { 
     critical: newCritical, 
     important: newImportant, 
     minor: newMinor 
-  } = categorizeIssues(reCheckResult);
+  } = categorizeIssues(reCheckResult, props.complianceData.nonWhitePixels); // Pass the original count
 
   return (
     <Box>
@@ -331,7 +333,7 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
       {/* Comparison View */}
       <Grid container spacing={3}>
         {/* Original Image */}
-        <Grid size={{xs:12,md:6}}>
+        <Grid size={{xs:12,md:6}} >
           <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: theme.darkShadow, borderRadius: '16px', height: '100%' }}>
             <Typography variant="h6" color={theme.textSecondary} gutterBottom>Before</Typography>
             <Box
@@ -340,12 +342,11 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
               alt="Original Image"
               sx={{ width: '100%', borderRadius: '8px', border: `1px solid ${theme.darkShadow}` }}
             />
-            {/* --- "BEFORE" ISSUES REMOVED FROM HERE --- */}
           </Paper>
         </Grid>
         
         {/* Fixed Image */}
-        <Grid size={{xs:12,md:6}}>
+        <Grid size={{xs:12,md:6}} >
           <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: theme.darkShadow, borderRadius: '16px', height: '100%' }}>
             <Typography variant="h6" color={theme.textSecondary} gutterBottom>After</Typography>
             
@@ -380,13 +381,11 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
               />
             )}
             
-            {/* --- "AFTER" ISSUES REMOVED FROM HERE --- */}
-            
             {/* --- DOWNLOAD BUTTON ADDED HERE --- */}
             {fixerState === 'success' && (
               <Box sx={{ mt: 2 }}>
                 <Button
-                  fullWidth // <-- Makes it span the width of this Grid item
+                  fullWidth 
                   variant="contained"
                   onClick={handleDownload}
                   disabled={isDownloading}
@@ -405,7 +404,6 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
                 >
                   {isDownloading ? 'Downloading...' : 'Download Fixed Image'}
                 </Button>
-                {/* Show download-specific errors here */}
                 {downloadError && (
                   <Typography color="error" variant="body2" sx={{ mt: 1, textAlign: 'center' }}>
                     {downloadError}
