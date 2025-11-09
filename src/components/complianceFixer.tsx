@@ -1,6 +1,6 @@
 // src/components/complianceFixer.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -33,9 +33,7 @@ export interface ComplianceFixerProps {
   violationOverlayUrl: string | null; 
   cutoutImageUrl: string | undefined;
   onFixSuccess: () => void | Promise<void>; 
-  
-  // This prop is needed for the download filename
-  originalFileName: string | null; 
+  originalFileName: string | null;
 }
 
 // --- Helper Types ---
@@ -54,11 +52,8 @@ const theme = {
 };
 
 
-/**
- * Loads an image from any URL (even cross-origin) and returns it
- * as a data: URL by drawing it to a canvas. This bypasses S3 CORS issues.
- */
 async function loadImageAsDataUrl(imageUrl: string): Promise<string> {
+  // ... (This function is unchanged) ...
   console.log('🔄 [loadImageAsDataUrl] Starting conversion for:', imageUrl);
   
   return new Promise((resolve, reject) => {
@@ -105,12 +100,12 @@ async function loadImageAsDataUrl(imageUrl: string): Promise<string> {
 const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
   const [fixerState, setFixerState] = useState<FixerState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null); // For download-specific errors
   const [fixedImageUrl, setFixedImageUrl] = useState<string | null>(null);
   const [fixedImageOverlayUrl, setFixedImageOverlayUrl] = useState<string | null>(null);
   const [reCheckResult, setReCheckResult] = useState<ComplianceResult | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // Add state for expanded sections
   const [expandedSections, setExpandedSections] = useState({
     critical: true,
     warning: true,
@@ -120,7 +115,6 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
-  // Get all original issues
   const { 
     critical: originalCritical, 
     important: originalImportant, 
@@ -135,10 +129,9 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
     fixesToApply.push('resize');
   }
 
-  /**
-   * Main workflow function to fix, re-analyze, and update the UI.
-   */
-const handleFixAndReAnalyze = async () => {
+  const handleFixAndReAnalyze = async () => {
+    if (fixerState !== 'idle') return; 
+
     console.log('🚀 [FIXER] handleFixAndReAnalyze START');
     setFixerState('fixing');
     setErrorMessage(null);
@@ -197,7 +190,6 @@ const handleFixAndReAnalyze = async () => {
       console.log('🔍 [FIXER] Step 3: Creating overlay image...');
       
       if (analysisData.segmentationUrl && analysisData.nonWhitePixels > 0) {
-        // This case handles if the fix *failed* (there are still violations)
         console.log('⚠️ [FIXER] Re-analysis has violations, creating red-dot overlay...');
         try {
           const overlay = await processMaskForViolations(fixedUrl, analysisData.segmentationUrl);
@@ -208,7 +200,6 @@ const handleFixAndReAnalyze = async () => {
           setFixedImageOverlayUrl(dataUrl);
         }
       } else {
-        // This is the success case (nonWhitePixels is 0 or no segmentation)
         console.log('✅ [FIXER] Re-analysis passed! Converting to data URL to bypass CORS...');
         try {
           const dataUrl = await loadImageAsDataUrl(fixedUrl);
@@ -232,14 +223,15 @@ const handleFixAndReAnalyze = async () => {
     }
   };
 
-  /**
-   * Securely downloads the cross-origin image from S3.
-   */
+  useEffect(() => {
+    handleFixAndReAnalyze();
+  }, []); // Runs on component mount
+
   const handleDownload = async () => {
     if (!fixedImageUrl) return;
 
     setIsDownloading(true);
-    setErrorMessage(null); // Clear any previous errors
+    setDownloadError(null); // Clear previous download errors
 
     try {
       const response = await fetch(fixedImageUrl);
@@ -252,10 +244,9 @@ const handleFixAndReAnalyze = async () => {
       const link = document.createElement('a');
       link.href = url;
       
-      // Use the prop to create the new filename
       const fileName = props.originalFileName 
         ? `fixed-${props.originalFileName}` 
-        : 'compliancekit-fixed-image.png'; // Fallback name
+        : 'compliancekit-fixed-image.png';
       link.download = fileName; 
       
       document.body.appendChild(link);
@@ -266,9 +257,9 @@ const handleFixAndReAnalyze = async () => {
     } catch (err) {
       console.error('Download failed:', err);
       if (err instanceof Error) {
-        setErrorMessage(`Download failed: ${err.message}`);
+        setDownloadError(`Download failed: ${err.message}`);
       } else {
-        setErrorMessage('An unknown download error occurred.');
+        setDownloadError('An unknown download error occurred.');
       }
     } finally {
       setIsDownloading(false);
@@ -278,9 +269,18 @@ const handleFixAndReAnalyze = async () => {
   // --- UI RENDER ---
   
   const renderStateContent = () => {
+    // This function now only controls the bottom action bar
     switch (fixerState) {
+      case 'idle':
       case 'fixing':
-        return <CircularProgress size={24} sx={{ color: theme.primary, mr: 2 }} />;
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CircularProgress size={24} sx={{ color: theme.primary }} />
+            <Typography sx={{ color: theme.textPrimary, fontWeight: 500 }}>
+              Applying fixes...
+            </Typography>
+          </Box>
+        );
       case 'rechecking':
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -292,65 +292,23 @@ const handleFixAndReAnalyze = async () => {
         );
         
       case 'success':
+        // The download button is no longer here, so we show a success chip
         return (
-          <Button
-            variant="contained"
-            onClick={handleDownload}
-            disabled={isDownloading}
-            startIcon={isDownloading ? <CircularProgress size={20} color="inherit" /> : <Download />}
-            sx={{
-              bgcolor: theme.primary,
-              color: 'white',
-              py: 1.5,
-              px: 3,
-              fontWeight: 600,
-              borderRadius: '50px',
-              boxShadow: theme.shadowOuter,
-              '&:hover': { bgcolor: theme.primaryDark },
-              '&:disabled': { bgcolor: 'grey.500', boxShadow: 'none' }
-            }}
-          >
-            {isDownloading ? 'Downloading...' : 'Download Fixed Image'}
-          </Button>
+           <Chip 
+             icon={<CheckCircle />} 
+             label="Fix complete!" 
+             color="success" 
+           />
         );
         
       case 'error':
+        // This only shows the *main fix error*, not download errors
         return <Typography color="error" variant="body2">{errorMessage}</Typography>;
-      case 'idle':
+      
       default:
-        return (
-          <Button
-            variant="contained"
-            startIcon={<AutoFixHigh />}
-            onClick={handleFixAndReAnalyze}
-            disabled={fixesToApply.length === 0}
-            sx={{
-              bgcolor: theme.primary,
-              color: 'white',
-              py: 1.5,
-              px: 3,
-              fontWeight: 600,
-              borderRadius: '50px',
-              boxShadow: theme.shadowOuter,
-              '&:hover': { bgcolor: theme.primaryDark }
-            }}
-          >
-            {fixesToApply.length > 0 
-              ? `Fix ${fixesToApply.length} Critical Issue${fixesToApply.length > 1 ? 's' : ''}`
-              : 'No fixes to apply'
-            }
-          </Button>
-        );
+        return null; // All states are handled
     }
   };
-
-  // Debug logs
-  console.log('--- [FIXER] Re-rendering ---');
-  console.log('State:', fixerState);
-  console.log('Fixed Image URL:', fixedImageUrl);
-  console.log('Overlay URL:', fixedImageOverlayUrl);
-  console.log('Error:', errorMessage);
-  console.log('---------------------------');
 
   // Get all categories from the re-check result
   const { 
@@ -367,15 +325,15 @@ const handleFixAndReAnalyze = async () => {
           <AutoFixHigh />
         </Avatar>
         <Box>
-          <Typography variant="h4" fontWeight={700} color={theme.textPrimary}>Auto-Fix</Typography>
-          <Typography color={theme.textSecondary}>Review the &quot;Before&quot; and &quot;After&quot; images below.</Typography>
+          <Typography variant="h4" fontWeight={700} color={theme.textPrimary}>Auto-Fix Results</Typography>
+          <Typography color={theme.textSecondary}>Review the fix and the new compliance report.</Typography>
         </Box>
       </Box>
 
       {/* Comparison View */}
       <Grid container spacing={3}>
         {/* Original Image */}
-        <Grid size={{xs:12,md:6}} >
+        <Grid size={{xs:12,md:6}}>
           <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: theme.darkShadow, borderRadius: '16px', height: '100%' }}>
             <Typography variant="h6" color={theme.textSecondary} gutterBottom>Before</Typography>
             <Box
@@ -384,34 +342,12 @@ const handleFixAndReAnalyze = async () => {
               alt="Original Image"
               sx={{ width: '100%', borderRadius: '8px', border: `1px solid ${theme.darkShadow}` }}
             />
-            
-            {/* --- RENDER ALL ORIGINAL ISSUES --- */}
-            <IssueSection 
-              title={`Critical Issues (${originalCritical.length})`} 
-              issues={originalCritical} 
-              type="critical" 
-              expanded={expandedSections.critical} 
-              onToggle={() => handleToggle('critical')} 
-            />
-            <IssueSection 
-              title={`Warnings (${originalImportant.length})`} 
-              issues={originalImportant} 
-              type="warning" 
-              expanded={expandedSections.warning} 
-              onToggle={() => handleToggle('warning')} 
-            />
-            <IssueSection 
-              title={`Passing Requirements (${originalMinor.length})`} 
-              issues={originalMinor} 
-              type="passing" 
-              expanded={expandedSections.passing} 
-              onToggle={() => handleToggle('passing')} 
-            />
+            {/* --- "BEFORE" ISSUES REMOVED FROM HERE --- */}
           </Paper>
         </Grid>
         
         {/* Fixed Image */}
-        <Grid size={{xs:12,md:6}} >
+        <Grid size={{xs:12,md:6}}>
           <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: theme.darkShadow, borderRadius: '16px', height: '100%' }}>
             <Typography variant="h6" color={theme.textSecondary} gutterBottom>After</Typography>
             
@@ -446,37 +382,75 @@ const handleFixAndReAnalyze = async () => {
               />
             )}
             
-            {/* Show the NEW issue list for the fixed image */}
-            {reCheckResult && (
-              <>
-                {/* --- RENDER ALL NEW ISSUES --- */}
-                <IssueSection 
-                  title={`New Critical Issues (${newCritical.length})`} 
-                  issues={newCritical} 
-                  type="critical" 
-                  expanded={expandedSections.critical} 
-                  onToggle={() => handleToggle('critical')} 
-                />
-                <IssueSection 
-                  title={`New Warnings (${newImportant.length})`} 
-                  issues={newImportant} 
-                  type="warning" 
-                  expanded={expandedSections.warning} 
-                  onToggle={() => handleToggle('warning')} 
-                />
-                <IssueSection 
-                  title={`New Passing Requirements (${newMinor.length})`} 
-                  issues={newMinor} 
-                  type="passing" 
-                  expanded={expandedSections.passing} 
-                  onToggle={() => handleToggle('passing')} 
-                />
-              </>
+            {/* --- "AFTER" ISSUES REMOVED FROM HERE --- */}
+            
+            {/* --- DOWNLOAD BUTTON ADDED HERE --- */}
+            {fixerState === 'success' && (
+              <Box sx={{ mt: 2 }}>
+                <Button
+                  fullWidth // <-- Makes it span the width of this Grid item
+                  variant="contained"
+                  onClick={handleDownload}
+                  disabled={isDownloading}
+                  startIcon={isDownloading ? <CircularProgress size={20} color="inherit" /> : <Download />}
+                  sx={{
+                    bgcolor: theme.primary,
+                    color: 'white',
+                    py: 1.5,
+                    px: 3,
+                    fontWeight: 600,
+                    borderRadius: '50px',
+                    boxShadow: theme.shadowOuter,
+                    '&:hover': { bgcolor: theme.primaryDark },
+                    '&:disabled': { bgcolor: 'grey.500', boxShadow: 'none' }
+                  }}
+                >
+                  {isDownloading ? 'Downloading...' : 'Download Fixed Image'}
+                </Button>
+                {/* Show download-specific errors here */}
+                {downloadError && (
+                  <Typography color="error" variant="body2" sx={{ mt: 1, textAlign: 'center' }}>
+                    {downloadError}
+                  </Typography>
+                )}
+              </Box>
             )}
           </Paper>
         </Grid>
       </Grid>
       
+      {/* --- NEW FULL-WIDTH RESULTS SECTION --- */}
+      <Box sx={{ mt: 3 }}>
+        {reCheckResult && (
+          <>
+            <Typography variant="h5" fontWeight={700} color={theme.textPrimary} sx={{ mb: 2 }}>
+              New Compliance Report
+            </Typography>
+            <IssueSection 
+              title={`New Critical Issues (${newCritical.length})`} 
+              issues={newCritical} 
+              type="critical" 
+              expanded={expandedSections.critical} 
+              onToggle={() => handleToggle('critical')} 
+            />
+            <IssueSection 
+              title={`New Warnings (${newImportant.length})`} 
+              issues={newImportant} 
+              type="warning" 
+              expanded={expandedSections.warning} 
+              onToggle={() => handleToggle('warning')} 
+            />
+            <IssueSection 
+              title={`New Passing Requirements (${newMinor.length})`} 
+              issues={newMinor} 
+              type="passing" 
+              expanded={expandedSections.passing} 
+              onToggle={() => handleToggle('passing')} 
+            />
+          </>
+        )}
+      </Box>
+
       {/* Actions */}
       <Box sx={{ mt: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Button 
