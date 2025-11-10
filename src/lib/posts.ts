@@ -4,6 +4,7 @@ import path from 'path';
 import matter from 'gray-matter';
 import { remark } from 'remark';
 import html from 'remark-html';
+import { fileURLToPath } from 'url';
 
 interface Post {
   slug: string;
@@ -12,19 +13,18 @@ interface Post {
   content: string;
 }
 
-const postsDirectory = path.join(process.cwd(), 'posts');
+// Create __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Navigate from src/lib to project root, then to posts
+// src/lib/posts.ts -> ../../posts
+const postsDirectory = path.join(__dirname, '..', '..', '..', 'posts');
 
 console.log('=== Posts Directory Debug ===');
-console.log('process.cwd():', process.cwd());
+console.log('__dirname:', __dirname);
 console.log('postsDirectory:', postsDirectory);
 console.log('Directory exists:', fs.existsSync(postsDirectory));
-
-// List all files in the current directory
-try {
-  console.log('Files in cwd:', fs.readdirSync(process.cwd()));
-} catch (err) {
-  console.log('Could not list cwd files:', err);
-}
 
 if (fs.existsSync(postsDirectory)) {
   try {
