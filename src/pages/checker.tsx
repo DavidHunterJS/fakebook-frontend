@@ -866,7 +866,7 @@ const ModernizedComplianceChecker: React.FC = () => {
           </Typography>
           <Box sx={{ display: 'flex', gap: 3 }}>
             <MuiLink 
-              href="/terms" 
+              href="/tos" 
               underline="hover" 
               sx={{ color: theme.textSecondary, fontWeight: 500 }}
             >

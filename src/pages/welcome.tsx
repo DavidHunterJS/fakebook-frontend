@@ -1,7 +1,9 @@
-// pages/compliance-kit.tsx
+// pages/welcome.tsx
 
 import type { NextPage } from 'next';
 import Head from 'next/head';
+import { useState, useEffect } from 'react'; // Added
+import { useRouter } from 'next/router'; // Added
 
 // Import MUI Components
 import {
@@ -21,15 +23,14 @@ import {
   Paper,
   Toolbar,
   Typography,
+  CircularProgress, // Added
+  Alert, // Added
 } from '@mui/material';
 
 // Import an icon for the list
 import CheckIcon from '@mui/icons-material/Check';
 
-// --- Reusable Style Objects (from your original CSS) ---
-// We define these as objects to reuse them in the `sx` prop
-// This is a common pattern to keep the JSX clean.
-
+// --- Reusable Style Objects ---
 const btnBase = {
   padding: '0.8rem 2rem',
   borderRadius: '50px',
@@ -38,7 +39,7 @@ const btnBase = {
   border: 'none',
   cursor: 'pointer',
   fontSize: '1rem',
-  textTransform: 'none', // Prevent MUI's default ALL CAPS
+  textTransform: 'none',
 };
 
 const btnNeomorph = {
@@ -49,6 +50,10 @@ const btnNeomorph = {
   '&:hover': {
     background: '#e6f7f5',
     boxShadow: '4px 4px 8px #c4d9d6, -4px -4px 8px #ffffff',
+  },
+  '&:disabled': { // Added
+    opacity: 0.6,
+    cursor: 'not-allowed',
   },
 };
 
@@ -61,11 +66,106 @@ const btnPrimary = {
     transform: 'translateY(-2px)',
     boxShadow: '10px 10px 20px #c4d9d6, -10px -10px 20px #ffffff',
   },
+  '&:disabled': { // Added
+    opacity: 0.6,
+    cursor: 'not-allowed',
+    transform: 'none',
+  },
 };
 
 // --- The Page Component ---
 
 const ComplianceKitPage: NextPage = () => {
+  // --- Logic copied from pricing.tsx ---
+  const router = useRouter();
+  const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
+
+  // Check authentication status on mount
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      setIsAuthenticated(response.ok);
+    } catch (err) {
+      console.error('Auth check failed:', err);
+      setIsAuthenticated(false);
+    } finally {
+      setCheckingAuth(false);
+    }
+  };
+
+  // Handle subscription purchase
+  const handleSubscribe = async (tier: 'Basic' | 'Pro') => {
+    setError(null);
+    if (!isAuthenticated) {
+      router.push(`/login?redirect=/pricing&tier=${tier}`); // Or /compliance-kit
+      return;
+    }
+    setLoading(tier);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/subscription/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ tier }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create checkout session');
+      }
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL received');
+      }
+    } catch (err: unknown) {
+      console.error('Subscription error:', err);
+      let message = 'Failed to start subscription. Please try again.';
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === 'string') {
+        message = err;
+      }
+      setError(message);
+      setLoading(null);
+    }
+  };
+
+  // Handle free signup
+  const handleFreeSignup = () => {
+    if (!isAuthenticated) {
+      router.push('/login');
+    } else {
+      router.push('/');
+    }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      setIsAuthenticated(false); // This is perfect
+      // router.push('/'); // <-- REMOVE THIS LINE
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
+  };
+  // --- End of copied logic ---
+
   return (
     <>
       <Head>
@@ -73,10 +173,8 @@ const ComplianceKitPage: NextPage = () => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
       
-      {/* CssBaseline resets browser defaults, similar to your '*' reset */}
       <CssBaseline />
 
-      {/* We use a Box as the main container with the background color */}
       <Box
         sx={{
           minHeight: '100vh',
@@ -89,7 +187,7 @@ const ComplianceKitPage: NextPage = () => {
         {/* NAV SECTION */}
         <AppBar
           position="static"
-          elevation={0} // We use `elevation={0}` to apply our own custom shadow
+          elevation={0}
           sx={{
             background: '#e6f7f5',
             boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
@@ -105,7 +203,9 @@ const ComplianceKitPage: NextPage = () => {
                 fontSize: '1.8rem',
                 fontWeight: 700,
                 color: '#2563eb',
+                cursor: 'pointer', // Added
               }}
+              onClick={() => router.push('/')} // Added
             >
               Compliance
               <Typography
@@ -116,17 +216,41 @@ const ComplianceKitPage: NextPage = () => {
               </Typography>
             </Typography>
 
-            {/* Nav Buttons */}
+            {/* Nav Buttons - Replaced with dynamic logic */}
             <Box sx={{ display: 'flex', gap: '1rem' }}>
-              <Button href="/login" sx={btnNeomorph}>
-                Log In
-              </Button>
-              <Button href="#" sx={btnPrimary}>
-                Start Free Trial
-              </Button>
+              {checkingAuth ? (
+                <CircularProgress size={24} sx={{ color: '#14b8a6' }} />
+              ) : isAuthenticated ? (
+                <>
+                  <Button onClick={() => router.push('/')} sx={btnPrimary}>
+                    Get Started
+                  </Button>
+                  <Button onClick={handleLogout} sx={btnNeomorph}>
+                    Log Out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button onClick={() => router.push('/login')} sx={btnNeomorph}>
+                    Log In
+                  </Button>
+                  <Button onClick={() => router.push('/login')} sx={btnPrimary}>
+                    Start Free Trial
+                  </Button>
+                </>
+              )}
             </Box>
           </Toolbar>
         </AppBar>
+
+        {/* ERROR ALERT - Added */}
+        {error && (
+          <Container maxWidth="lg" sx={{ mt: 2 }}>
+            <Alert severity="error" onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          </Container>
+        )}
 
         {/* HERO SECTION */}
         <Container maxWidth="lg" sx={{ textAlign: 'center', py: 6, px: 2 }}>
@@ -217,7 +341,7 @@ const ComplianceKitPage: NextPage = () => {
           {/* CTA Section */}
           <Box sx={{ margin: '3rem 0' }}>
             <Button
-              href="#"
+              onClick={handleFreeSignup} // Changed
               sx={{
                 ...btnPrimary,
                 fontSize: '1.3rem',
@@ -238,7 +362,7 @@ const ComplianceKitPage: NextPage = () => {
           </Box>
         </Container>
 
-        {/* FEATURES SECTION */}
+        {/* FEATURES SECTION ... (no changes needed here) ... */}
         <Container maxWidth="lg" sx={{ padding: '4rem 2rem' }}>
           <Typography
             variant="h2"
@@ -346,6 +470,7 @@ const ComplianceKitPage: NextPage = () => {
           </Grid>
         </Container>
 
+
         {/* PRICING SECTION */}
         <Container maxWidth="lg" sx={{ margin: '4rem auto', padding: '0 2rem 4rem' }}>
           <Typography
@@ -377,6 +502,7 @@ const ComplianceKitPage: NextPage = () => {
                   position: 'relative',
                 }}
               >
+                {/* ... (content) ... */}
                 <Typography
                   sx={{
                     fontSize: '1.8rem',
@@ -405,10 +531,10 @@ const ComplianceKitPage: NextPage = () => {
                   }}
                 >
                   Perfect to get started
-                </Typography>
-
+                </Typography>                
                 <List sx={{ mb: 'auto' }}>
-                  {[
+                  {/* ... (list items) ... */}
+                   {[
                     '10 image checks (lifetime)',
                     '3 image fixes (lifetime)',
                     'No credit card required',
@@ -435,7 +561,7 @@ const ComplianceKitPage: NextPage = () => {
                 </List>
 
                 <Button
-                  href="#"
+                  onClick={handleFreeSignup} // Changed
                   sx={{
                     ...btnNeomorph,
                     width: '100%',
@@ -478,6 +604,7 @@ const ComplianceKitPage: NextPage = () => {
                   },
                 }}
               >
+                {/* ... (content) ... */}
                 <Typography
                   sx={{
                     fontSize: '1.8rem',
@@ -506,9 +633,9 @@ const ComplianceKitPage: NextPage = () => {
                   }}
                 >
                   per month
-                </Typography>
-
+                </Typography>                
                 <List sx={{ mb: 'auto' }}>
+                   {/* ... (list items) ... */}
                   {[
                     '50 checks per month',
                     '25 fixes per month',
@@ -540,7 +667,8 @@ const ComplianceKitPage: NextPage = () => {
                 </List>
 
                 <Button
-                  href="#"
+                  onClick={() => handleSubscribe('Basic')} // Changed
+                  disabled={loading !== null} // Added
                   sx={{
                     ...btnPrimary,
                     width: '100%',
@@ -549,7 +677,11 @@ const ComplianceKitPage: NextPage = () => {
                     background: 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
                   }}
                 >
-                  Start Free Trial
+                  {loading === 'Basic' ? ( // Added
+                    <CircularProgress size={24} sx={{ color: 'white' }} />
+                  ) : (
+                    'Get Basic' // Changed
+                  )}
                 </Button>
               </Paper>
             </Grid>
@@ -569,6 +701,7 @@ const ComplianceKitPage: NextPage = () => {
                   position: 'relative',
                 }}
               >
+                {/* ... (content) ... */}
                 <Typography
                   sx={{
                     fontSize: '1.8rem',
@@ -583,7 +716,7 @@ const ComplianceKitPage: NextPage = () => {
                   sx={{
                     fontSize: '3rem',
                     fontWeight: 800,
-                    color: '#14b8a6',
+                    color: '#14b8a6', // This matches the color from your original file
                     mb: '0',
                   }}
                 >
@@ -598,8 +731,8 @@ const ComplianceKitPage: NextPage = () => {
                 >
                   per month
                 </Typography>
-
                 <List sx={{ mb: 'auto' }}>
+                  {/* ... (list items) ... */}
                   {[
                     '150 checks per month',
                     '75 fixes per month',
@@ -631,7 +764,8 @@ const ComplianceKitPage: NextPage = () => {
                 </List>
 
                 <Button
-                  href="#"
+                  onClick={() => handleSubscribe('Pro')} // Changed
+                  disabled={loading !== null} // Added
                   sx={{
                     ...btnPrimary,
                     width: '100%',
@@ -639,7 +773,11 @@ const ComplianceKitPage: NextPage = () => {
                     padding: '0.9rem 0',
                   }}
                 >
-                  Start Free Trial
+                  {loading === 'Pro' ? ( // Added
+                    <CircularProgress size={24} sx={{ color: 'white' }} />
+                  ) : (
+                    'Get Pro' // Changed
+                  )}
                 </Button>
               </Paper>
             </Grid>

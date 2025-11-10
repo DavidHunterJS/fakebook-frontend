@@ -40,7 +40,9 @@ function AppContent({ Component, pageProps }: AppProps) {
                           '/tos',
                           '/privacy',
                           '/subscription/success',
-                          '/subscription/cancel'
+                          '/subscription/cancel',
+                          '/blog',
+                          '/blog/*'
                         ];
   const hideHeader = noHeaderPaths.includes(router.pathname);
   
@@ -62,7 +64,9 @@ function AppContent({ Component, pageProps }: AppProps) {
     '/tos',
     '/privacy',
     '/subscription/success',
-    '/subscription/cancel'
+    '/subscription/cancel',
+    '/blog',
+    '/blog/*'
   ];
   
   // Check if current path starts with /profile/ to match dynamic routes
