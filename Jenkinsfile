@@ -309,7 +309,28 @@ pipeline {
                 }
             }
         }
-        
+        stage('Debug - Verify Posts Directory') {
+            steps {
+                script {
+                    sh '''
+                        echo "=== Debugging Posts Directory ==="
+                        echo "Current directory: $(pwd)"
+                        echo "Listing root directory contents:"
+                        ls -la
+                        echo ""
+                        echo "Checking for posts directory:"
+                        if [ -d "posts" ]; then
+                            echo "✅ posts/ directory exists"
+                            echo "Contents of posts/:"
+                            ls -la posts/
+                        else
+                            echo "❌ posts/ directory NOT FOUND"
+                        fi
+                        echo "=== End Debug ==="
+                    '''
+                }
+            }
+        }
         // stage('Run Tests') { // <-- ENTIRE STAGE REMOVED
         //     when { expression { params.SKIP_TESTS == false } }
         //     steps { sh 'npm test' }
