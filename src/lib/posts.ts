@@ -19,7 +19,7 @@ const __dirname = path.dirname(__filename);
 
 // Navigate from src/lib to project root, then to posts
 // src/lib/posts.ts -> ../../posts
-const postsDirectory = path.join(__dirname, '..', '..', '..', 'posts');
+const postsDirectory = path.join(__dirname, '..', '..', 'posts');
 
 console.log('=== Posts Directory Debug ===');
 console.log('__dirname:', __dirname);
