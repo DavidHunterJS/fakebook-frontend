@@ -257,16 +257,16 @@ const ModernizedComplianceChecker: React.FC = () => {
 // --- NEW LOGIC ---
 // We are "loading" if the main context is loading OR
 // if the user is loaded but their subscription status hasn't arrived yet.
-const isSubscriptionLoading = loading || (user && user.subscriptionStatus === undefined);
+// const isSubscriptionLoading = loading || (user && user.subscriptionStatus === undefined);
 
 // This calculation is now safe.
-const hasPaidPlan = user?.subscriptionStatus === 'active';
+// const hasPaidPlan = user?.subscriptionStatus === 'active';
   
   // --- (3. UPDATE THE HEADER COMPONENT TO ACCEPT PROPS) ---
   const Header: React.FC<HeaderProps> = ({ subscription }) => {
     // Check if the user has a paid plan
     const hasPaidPlan = subscription && (subscription.tier === 'Basic' || subscription.tier === 'Pro');
-    const { user, loading } = useContext(AuthContext);
+    const {  loading } = useContext(AuthContext);
     return (
       <AppBar 
         position="sticky" 
