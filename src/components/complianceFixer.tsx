@@ -31,7 +31,7 @@ export interface ComplianceFixerProps {
   complianceData: ComplianceResult; // This contains the *original* analysis result
   onBack: () => void;
   violationOverlayUrl: string | null; 
-  cutoutImageUrl: string | undefined;
+  maskUrl: string | undefined;
   onFixSuccess: () => void | Promise<void>; 
   originalFileName: string | null;
 }
@@ -145,8 +145,9 @@ const ComplianceFixer: React.FC<ComplianceFixerProps> = (props) => {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          cutoutImageUrl: props.cutoutImageUrl,
+          originalImageUrl: props.originalImageUrl,
           fixesToApply: fixesToApply,
+          maskUrl: props.maskUrl,
           dimensions: props.complianceData.dimensions,
         }),
       });

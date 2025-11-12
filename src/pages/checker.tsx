@@ -1,16 +1,19 @@
 // src/pages/checker.tsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import {
   Box, Typography, Button, Card,  Chip, Avatar,  
    AppBar, Toolbar, Container, Paper, 
   CircularProgress,  Fab,
-  Divider, Link as MuiLink 
+  Divider, Link as MuiLink, Skeleton 
 } from '@mui/material';
 import {
   CloudUpload, CheckCircle, Error as ErrorIcon,
   PhotoCamera, AutoFixHigh, ArrowForward, Info, 
   Settings // <-- 1. IMPORTED THE GEAR ICON
 } from '@mui/icons-material';
+import Link from 'next/link';
+import ArrowUpward from '@mui/icons-material/ArrowUpward';
+import AuthContext from '../context/AuthContext';
 
 // --- (IMPORTANT) Make sure to import your actual API function ---
 import { uploadImage } from '../utils/api';
@@ -26,6 +29,7 @@ import {
 // 👇 --- IMPORT YOUR CUSTOM HOOK ---
 import { useSubscription } from '../hooks/useSubscription';
 import { SubscriptionData } from '@/types/subscriptions.types.js'; // Adjust path if needed
+
 
 // --- Neomorphic Theme Constants (from compliance-kit.tsx) ---
 const theme = {
@@ -247,12 +251,22 @@ const ModernizedComplianceChecker: React.FC = () => {
   
 
   // --- UI Sub-components ---
+
+  const { user, loading } = useContext(AuthContext);
+
+// --- NEW LOGIC ---
+// We are "loading" if the main context is loading OR
+// if the user is loaded but their subscription status hasn't arrived yet.
+const isSubscriptionLoading = loading || (user && user.subscriptionStatus === undefined);
+
+// This calculation is now safe.
+const hasPaidPlan = user?.subscriptionStatus === 'active';
   
   // --- (3. UPDATE THE HEADER COMPONENT TO ACCEPT PROPS) ---
   const Header: React.FC<HeaderProps> = ({ subscription }) => {
     // Check if the user has a paid plan
     const hasPaidPlan = subscription && (subscription.tier === 'Basic' || subscription.tier === 'Pro');
-    
+    const { user, loading } = useContext(AuthContext);
     return (
       <AppBar 
         position="sticky" 
@@ -289,14 +303,23 @@ const ModernizedComplianceChecker: React.FC = () => {
             </Typography>
             
             {/* --- (4. ADD CONDITIONAL BUTTON/PILL) --- */}
-            {hasPaidPlan && (
+            {loading ? (
+              // STATE 1: We're loading auth AND subscription
+              <Skeleton 
+                variant="rounded" 
+                width={90} 
+                height={24}
+                sx={{ mr: 1 }} 
+              />
+            ) : hasPaidPlan ? (
+              // STATE 2: We're done, user has a plan
               <Chip 
                 label="Manage"
                 icon={<Settings sx={{ fontSize: '1rem', color: 'white', ml: '6px' }} />}
                 size="small" 
-                component="a" // Makes it a link
+                component="a"
                 href="https://billing.stripe.com/p/login/4gM6oJ5WS96ngkc5h14Ni00"
-                target="_blank" // Open in new tab
+                target="_blank"
                 rel="noopener noreferrer"
                 clickable
                 sx={{ 
@@ -304,7 +327,29 @@ const ModernizedComplianceChecker: React.FC = () => {
                   color: 'white',
                   fontWeight: 600,
                   px: 1,
-                  mr: 1, // Add margin to separate from Beta chip
+                  mr: 1,
+                  transition: 'opacity 0.2s',
+                  '&:hover': {
+                    opacity: 0.8,
+                    bgcolor: theme.primaryDark
+                  }
+                }} 
+              />
+            ) : (
+              // STATE 3: We're done, user has no plan
+              <Chip 
+                label="Upgrade"
+                icon={<ArrowUpward sx={{ fontSize: '1rem', color: 'white', ml: '6px' }} />}
+                size="small" 
+                component={Link}
+                href="/pricing"
+                clickable
+                sx={{ 
+                  background: theme.primary,
+                  color: 'white',
+                  fontWeight: 600,
+                  px: 1,
+                  mr: 1,
                   transition: 'opacity 0.2s',
                   '&:hover': {
                     opacity: 0.8,
@@ -783,7 +828,7 @@ const ModernizedComplianceChecker: React.FC = () => {
               complianceData={complianceData}
               onBack={handleBackToResults}
               violationOverlayUrl={processedOverlayUrl}
-              cutoutImageUrl={complianceData.cutoutUrl}
+              maskUrl={complianceData.segmentationUrl}
               onFixSuccess={refetchCredits} 
               originalFileName={originalFileName} 
             />

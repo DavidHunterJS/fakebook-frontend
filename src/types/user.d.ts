@@ -21,4 +21,6 @@ export interface User {
   googleId?: string;
   authProvider: 'local' | 'google';
   isOAuthUser: boolean;
+  subscriptionStatus?: string;
+  
 }
