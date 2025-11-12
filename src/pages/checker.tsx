@@ -252,7 +252,7 @@ const ModernizedComplianceChecker: React.FC = () => {
 
   // --- UI Sub-components ---
 
-  const { user, loading } = useContext(AuthContext);
+  // const { user, loading } = useContext(AuthContext);
 
 // --- NEW LOGIC ---
 // We are "loading" if the main context is loading OR

@@ -168,7 +168,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
         dispatch({ type: 'AUTH_SUCCESS', payload: { user: combinedUser } });
 
       } catch (error) {
-        console.log('No active session found. Setting auth to logged out.');
+        console.log('No active session found. Setting auth to logged out.'+error);
         dispatch({ type: 'AUTH_ERROR' });
       }
     };
