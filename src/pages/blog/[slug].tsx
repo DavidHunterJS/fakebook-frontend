@@ -357,7 +357,7 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
 // --- Data Fetching (Refactored to use marked) ---
 
 export const getStaticPaths: GetStaticPaths = async () => {
-  const postsDirectory = path.resolve(process.cwd(), 'posts');
+  const postsDirectory = path.join(__dirname, '../../../posts');
 
   console.log('Current working directory:', process.cwd());
   console.log('Looking for posts in:', postsDirectory);
@@ -381,7 +381,7 @@ export const getStaticPaths: GetStaticPaths = async () => {
 
 export const getStaticProps: GetStaticProps = async ({ params }) => {
   const slug = params?.slug as string;
-  const postsDirectory = path.resolve(process.cwd(), 'posts');
+  const postsDirectory = path.join(__dirname, '../../../posts');
   const fullPath = path.join(postsDirectory, `${slug}.md`);
   const fileContents = fs.readFileSync(fullPath, 'utf8');
 
