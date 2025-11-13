@@ -86,9 +86,7 @@ function buildPropsFromPath(postsDirectory: string): GetStaticPropsResult<BlogPa
 
 // --- getStaticProps ---
 
-export const getStaticProps: GetStaticProps = async (): Promise<
-  GetStaticPropsResult<BlogPageProps>
-> => {
+export async function getServerSideProps() {
   try {
     const postsDirectory = getPostsDirectory();
     return buildPropsFromPath(postsDirectory);
@@ -100,7 +98,7 @@ export const getStaticProps: GetStaticProps = async (): Promise<
       },
     };
   }
-};
+}
 
 // --- Page Component ---
 export default function BlogPage({ posts }: BlogPageProps) {

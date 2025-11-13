@@ -408,14 +408,14 @@ export const getStaticPaths: GetStaticPaths = async () => {
   }
 };
 
-export const getStaticProps: GetStaticProps<BlogPostProps> = async ({ params }) => {
-  const slug = params?.slug as string;
+export async function getServerSideProps({ params }: { params: { slug: string } }) {
+  const slug = params.slug;
   
   try {
     const postsDirectory = getPostsDirectory();
     const fullPath = path.join(postsDirectory, `${slug}.md`);
     
-    console.log('getStaticProps - Looking for file:', fullPath);
+    console.log('getServerSideProps - Looking for file:', fullPath);
     
     if (!fs.existsSync(fullPath)) {
       console.error('Post file not found:', fullPath);
@@ -454,9 +454,9 @@ export const getStaticProps: GetStaticProps<BlogPostProps> = async ({ params }) 
       },
     };
   } catch (error) {
-    console.error('Error in getStaticProps:', error);
+    console.error('Error in getServerSideProps:', error);
     return {
       notFound: true,
     };
   }
-};
+}
