@@ -1,5 +1,5 @@
 // pages/blog/[slug].tsx
-import { GetStaticProps, GetStaticPaths } from 'next';
+// import { GetStaticProps, GetStaticPaths } from 'next';
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';

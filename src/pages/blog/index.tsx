@@ -1,6 +1,6 @@
 // src/pages/blog/index.tsx
 import NextLink from 'next/link';
-import type { GetStaticProps, GetStaticPropsResult } from 'next';
+import type {  GetStaticPropsResult } from 'next';
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
