@@ -1,5 +1,5 @@
 // pages/blog/[slug].tsx
-import { GetStaticProps, GetStaticPaths } from 'next';
+// import { GetStaticProps, GetStaticPaths } from 'next';
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
@@ -70,6 +70,7 @@ function getPostsDirectory(): string {
     path.join(__dirname, '../../../posts'),    // Production build
     path.join(process.cwd(), 'posts'),         // Development
     path.join(__dirname, '../../posts'),       // Alternative
+    '/app/posts',                               // Heroku production (ADD THIS!)
   ];
 
   for (const postsPath of possiblePaths) {
@@ -382,40 +383,40 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
 
 // --- Data Fetching ---
 
-export const getStaticPaths: GetStaticPaths = async () => {
-  try {
-    const postsDirectory = getPostsDirectory();
-    const filenames = fs.readdirSync(postsDirectory);
+// export const getStaticPaths: GetStaticPaths = async () => {
+//   try {
+//     const postsDirectory = getPostsDirectory();
+//     const filenames = fs.readdirSync(postsDirectory);
 
-    const paths = filenames
-      .filter((filename) => filename.endsWith('.md'))
-      .map((filename) => ({
-        params: { slug: filename.replace(/\.md$/, '') },
-      }));
+//     const paths = filenames
+//       .filter((filename) => filename.endsWith('.md'))
+//       .map((filename) => ({
+//         params: { slug: filename.replace(/\.md$/, '') },
+//       }));
 
-    console.log('Generated paths:', paths);
+//     console.log('Generated paths:', paths);
 
-    return {
-      paths,
-      fallback: false,
-    };
-  } catch (error) {
-    console.error('Error in getStaticPaths:', error);
-    return {
-      paths: [],
-      fallback: false,
-    };
-  }
-};
+//     return {
+//       paths,
+//       fallback: 'blocking',
+//     };
+//   } catch (error) {
+//     console.error('Error in getStaticPaths:', error);
+//     return {
+//       paths: [],
+//       fallback: false,
+//     };
+//   }
+// };
 
-export const getStaticProps: GetStaticProps<BlogPostProps> = async ({ params }) => {
-  const slug = params?.slug as string;
+export async function getServerSideProps({ params }: { params: { slug: string } }) {
+  const slug = params.slug;
   
   try {
     const postsDirectory = getPostsDirectory();
     const fullPath = path.join(postsDirectory, `${slug}.md`);
     
-    console.log('getStaticProps - Looking for file:', fullPath);
+    console.log('getServerSideProps - Looking for file:', fullPath);
     
     if (!fs.existsSync(fullPath)) {
       console.error('Post file not found:', fullPath);
@@ -454,9 +455,9 @@ export const getStaticProps: GetStaticProps<BlogPostProps> = async ({ params }) 
       },
     };
   } catch (error) {
-    console.error('Error in getStaticProps:', error);
+    console.error('Error in getServerSideProps:', error);
     return {
       notFound: true,
     };
   }
-};
+}
