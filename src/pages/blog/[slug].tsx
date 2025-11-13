@@ -358,6 +358,13 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
 
 export const getStaticPaths: GetStaticPaths = async () => {
   const postsDirectory = path.join(process.cwd(), 'posts');
+
+  console.log('Current working directory:', process.cwd());
+  console.log('Looking for posts in:', postsDirectory);
+  if (!fs.existsSync(postsDirectory)) {
+    console.error('Posts directory not found at:', postsDirectory);
+    return { paths: [], fallback: false };
+  }
   const filenames = fs.readdirSync(postsDirectory);
 
   const paths = filenames
