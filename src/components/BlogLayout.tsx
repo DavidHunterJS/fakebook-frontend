@@ -1,7 +1,6 @@
 // src/components/BlogLayout.tsx
 import type { FC, ReactNode } from 'react';
 import { useRouter } from 'next/router';
-import NextLink from 'next/link';
 import {
   AppBar,
   Box,
@@ -24,16 +23,16 @@ const btnBase = {
   textTransform: 'none',
 };
 
-const btnNeomorph = {
-  ...btnBase,
-  background: '#e6f7f5',
-  color: '#1e3a8a',
-  boxShadow: '8px 8px 16px #c4d9d6, -8px -8px 16px #ffffff',
-  '&:hover': {
-    background: '#e6f7f5',
-    boxShadow: '4px 4px 8px #c4d9d6, -4px -4px 8px #ffffff',
-  },
-};
+// const btnNeomorph = {
+//   ...btnBase,
+//   background: '#e6f7f5',
+//   color: '#1e3a8a',
+//   boxShadow: '8px 8px 16px #c4d9d6, -8px -8px 16px #ffffff',
+//   '&:hover': {
+//     background: '#e6f7f5',
+//     boxShadow: '4px 4px 8px #c4d9d6, -4px -4px 8px #ffffff',
+//   },
+// };
 
 const btnPrimary = {
   ...btnBase,
