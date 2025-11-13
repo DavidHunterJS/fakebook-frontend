@@ -379,9 +379,29 @@ export const getStaticPaths: GetStaticPaths = async () => {
   };
 };
 
+function getPostsDirectory(): string {
+  // Try multiple possible locations
+  const possiblePaths = [
+    path.join(__dirname, '../../../posts'),           // Production build
+    path.join(process.cwd(), 'posts'),                // Development
+    path.join(__dirname, '../../posts'),              // Alternative
+  ];
+
+  for (const postsPath of possiblePaths) {
+    if (fs.existsSync(postsPath)) {
+      console.log('Found posts directory at:', postsPath);
+      return postsPath;
+    }
+  }
+
+  throw new Error('Posts directory not found in any expected location');
+}
+
+
+
 export const getStaticProps: GetStaticProps = async ({ params }) => {
   const slug = params?.slug as string;
-  const postsDirectory = path.join(__dirname, '../../../posts');
+  const postsDirectory = getPostsDirectory();
   const fullPath = path.join(postsDirectory, `${slug}.md`);
   const fileContents = fs.readFileSync(fullPath, 'utf8');
 
