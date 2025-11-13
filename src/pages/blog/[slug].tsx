@@ -70,6 +70,7 @@ function getPostsDirectory(): string {
     path.join(__dirname, '../../../posts'),    // Production build
     path.join(process.cwd(), 'posts'),         // Development
     path.join(__dirname, '../../posts'),       // Alternative
+    '/app/posts',                               // Heroku production (ADD THIS!)
   ];
 
   for (const postsPath of possiblePaths) {
