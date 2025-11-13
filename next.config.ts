@@ -43,7 +43,7 @@ const nextConfig: NextConfig = {
   //================================================
   // Webpack Customization
   //================================================
-  webpack: (config, { webpack }) => {
+  webpack: (config, { webpack, isServer }) => {
     // Provides browser-compatible polyfills for Node.js core modules.
     // This is essential for libraries that might expect a Node.js environment.
     config.plugins.push(
@@ -64,7 +64,12 @@ const nextConfig: NextConfig = {
 
     return config;
   },
-  
+
+  //================================================
+  // Output Configuration - Include standalone output
+  //================================================
+  output: 'standalone',
+
   //================================================
   // Security Headers
   //================================================
