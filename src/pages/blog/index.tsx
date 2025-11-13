@@ -1,6 +1,6 @@
 // src/pages/blog/index.tsx
 import NextLink from 'next/link';
-import type {  GetStaticPropsResult } from 'next';
+import type { GetStaticProps, GetStaticPropsResult } from 'next';
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
@@ -87,7 +87,9 @@ function buildPropsFromPath(postsDirectory: string): GetStaticPropsResult<BlogPa
 
 // --- getStaticProps ---
 
-export async function getServerSideProps() {
+export const getStaticProps: GetStaticProps = async (): Promise<
+  GetStaticPropsResult<BlogPageProps>
+> => {
   try {
     const postsDirectory = getPostsDirectory();
     return buildPropsFromPath(postsDirectory);
@@ -99,7 +101,7 @@ export async function getServerSideProps() {
       },
     };
   }
-}
+};
 
 // --- Page Component ---
 export default function BlogPage({ posts }: BlogPageProps) {
