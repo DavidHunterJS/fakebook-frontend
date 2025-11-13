@@ -4,21 +4,20 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import { marked } from 'marked';
-import NextLink from 'next/link'; // Import NextLink
+import NextLink from 'next/link';
 import SEO from '@/components/SEO';
-import BlogLayout from '@/components/BlogLayout'; // <-- Import layout
+import BlogLayout from '@/components/BlogLayout';
 import {
   Typography,
   Paper,
   Box,
   Button,
-  Link, // <-- Import MUI Link
+  Link,
   List,
   ListItem,
 } from '@mui/material';
 
-// --- Reusable Style Objects (from your welcome.tsx) ---
-// (You could also move these to a shared theme file)
+// --- Reusable Style Objects ---
 const btnBase = {
   padding: '0.8rem 2rem',
   borderRadius: '50px',
@@ -41,7 +40,7 @@ const btnPrimary = {
   },
 };
 
-// --- Interfaces (Unchanged) ---
+// --- Interfaces ---
 interface Frontmatter {
   title: string;
   description: string;
@@ -60,23 +59,51 @@ interface Frontmatter {
 
 interface BlogPostProps {
   frontmatter: Frontmatter;
-  content: string; // This will be HTML from marked
+  content: string;
   slug: string;
 }
 
-// --- Page Component (Refactored) ---
+// --- Helper Function ---
+function getPostsDirectory(): string {
+  // Try multiple possible locations
+  const possiblePaths = [
+    path.join(__dirname, '../../../posts'),    // Production build
+    path.join(process.cwd(), 'posts'),         // Development
+    path.join(__dirname, '../../posts'),       // Alternative
+  ];
+
+  for (const postsPath of possiblePaths) {
+    if (fs.existsSync(postsPath)) {
+      console.log('Found posts directory at:', postsPath);
+      return postsPath;
+    }
+  }
+
+  throw new Error('Posts directory not found in any expected location');
+}
+
+// --- Page Component ---
 export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) {
-  // Generate Article Schema (Unchanged)
+  // Add validation
+  if (!frontmatter) {
+    return (
+      <BlogLayout>
+        <Typography variant="h1">Error: Post data not found</Typography>
+      </BlogLayout>
+    );
+  }
+
+  // Generate Article Schema
   const articleSchema = {
     '@context': 'https://schema.org',
     '@type': 'Article',
-    headline: frontmatter.title,
-    description: frontmatter.description,
+    headline: frontmatter.title || 'Untitled',
+    description: frontmatter.description || '',
     image: `https://compliancekit.app${
       frontmatter.image || '/blog/default.jpg'
     }`,
-    datePublished: frontmatter.date,
-    dateModified: frontmatter.modified || frontmatter.date,
+    datePublished: frontmatter.date || new Date().toISOString(),
+    dateModified: frontmatter.modified || frontmatter.date || new Date().toISOString(),
     author: {
       '@type': 'Person',
       name: frontmatter.author || 'David',
@@ -95,7 +122,7 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
     },
   };
 
-  // Generate FAQ Schema (Unchanged)
+  // Generate FAQ Schema
   const faqSchema = frontmatter.faqs
     ? {
         '@context': 'https://schema.org',
@@ -141,7 +168,7 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
       <BlogLayout>
         <Paper
           elevation={0}
-          component="article" // Use the 'article' tag
+          component="article"
           sx={{
             background: '#e6f7f5',
             padding: { xs: '1.5rem', md: '3rem' },
@@ -160,8 +187,8 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
               sx={{
                 width: '100%',
                 height: 'auto',
-                mb: 4, // 32px
-                borderRadius: '20px', // Softer radius
+                mb: 4,
+                borderRadius: '20px',
                 boxShadow:
                   '8px 8px 16px #c4d9d6, -8px -8px 16px #ffffff',
               }}
@@ -201,7 +228,7 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
             </Typography>
           </Box>
 
-          {/* Content (Prose replacement) */}
+          {/* Content */}
           <Box
             sx={{
               color: '#475569',
@@ -255,7 +282,7 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
                 padding: 0,
               },
             }}
-            dangerouslySetInnerHTML={{ __html: content }} // 'content' is already HTML
+            dangerouslySetInnerHTML={{ __html: content }}
           />
 
           {/* Related Posts (if exist) */}
@@ -264,8 +291,8 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
               <Box
                 component="section"
                 sx={{
-                  mt: 6, // 48px
-                  pt: 4, // 32px
+                  mt: 6,
+                  pt: 4,
                   borderTop: '2px solid #c4d9d6',
                 }}
               >
@@ -281,9 +308,9 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
                   Related Articles
                 </Typography>
                 <List sx={{ spaceY: 1 }}>
-                  {frontmatter.relatedPosts.map((slug) => (
-                    <ListItem key={slug} sx={{ padding: '4px 0' }}>
-                      <NextLink href={`/blog/${slug}`} passHref legacyBehavior>
+                  {frontmatter.relatedPosts.map((postSlug) => (
+                    <ListItem key={postSlug} sx={{ padding: '4px 0' }}>
+                      <NextLink href={`/blog/${postSlug}`} passHref legacyBehavior>
                         <Link
                           sx={{
                             fontSize: '1.1rem',
@@ -296,8 +323,7 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
                             },
                           }}
                         >
-                          {/* Simple slug-to-title guess */}
-                          {slug
+                          {postSlug
                             .replace(/-/g, ' ')
                             .replace(
                               /\w\S*/g,
@@ -354,67 +380,83 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
   );
 }
 
-// --- Data Fetching (Refactored to use marked) ---
+// --- Data Fetching ---
 
 export const getStaticPaths: GetStaticPaths = async () => {
-  const postsDirectory = path.join(__dirname, '../../../posts');
+  try {
+    const postsDirectory = getPostsDirectory();
+    const filenames = fs.readdirSync(postsDirectory);
 
-  console.log('Current working directory:', process.cwd());
-  console.log('Looking for posts in:', postsDirectory);
-  if (!fs.existsSync(postsDirectory)) {
-    console.error('Posts directory not found at:', postsDirectory);
-    return { paths: [], fallback: false };
+    const paths = filenames
+      .filter((filename) => filename.endsWith('.md'))
+      .map((filename) => ({
+        params: { slug: filename.replace(/\.md$/, '') },
+      }));
+
+    console.log('Generated paths:', paths);
+
+    return {
+      paths,
+      fallback: false,
+    };
+  } catch (error) {
+    console.error('Error in getStaticPaths:', error);
+    return {
+      paths: [],
+      fallback: false,
+    };
   }
-  const filenames = fs.readdirSync(postsDirectory);
-
-  const paths = filenames
-    .filter((filename) => filename.endsWith('.md'))
-    .map((filename) => ({
-      params: { slug: filename.replace(/\.md$/, '') },
-    }));
-
-  return {
-    paths,
-    fallback: false,
-  };
 };
 
-function getPostsDirectory(): string {
-  // Try multiple possible locations
-  const possiblePaths = [
-    path.join(__dirname, '../../../posts'),           // Production build
-    path.join(process.cwd(), 'posts'),                // Development
-    path.join(__dirname, '../../posts'),              // Alternative
-  ];
-
-  for (const postsPath of possiblePaths) {
-    if (fs.existsSync(postsPath)) {
-      console.log('Found posts directory at:', postsPath);
-      return postsPath;
-    }
-  }
-
-  throw new Error('Posts directory not found in any expected location');
-}
-
-
-
-export const getStaticProps: GetStaticProps = async ({ params }) => {
+export const getStaticProps: GetStaticProps<BlogPostProps> = async ({ params }) => {
   const slug = params?.slug as string;
-  const postsDirectory = getPostsDirectory();
-  const fullPath = path.join(postsDirectory, `${slug}.md`);
-  const fileContents = fs.readFileSync(fullPath, 'utf8');
+  
+  try {
+    const postsDirectory = getPostsDirectory();
+    const fullPath = path.join(postsDirectory, `${slug}.md`);
+    
+    console.log('getStaticProps - Looking for file:', fullPath);
+    
+    if (!fs.existsSync(fullPath)) {
+      console.error('Post file not found:', fullPath);
+      return {
+        notFound: true,
+      };
+    }
 
-  const { data: frontmatter, content } = matter(fileContents);
+    const fileContents = fs.readFileSync(fullPath, 'utf8');
+    const { data, content } = matter(fileContents);
 
-  // Convert markdown to HTML
-  const htmlContent = await marked(content);
+    console.log('Parsed frontmatter:', data);
 
-  return {
-    props: {
-      frontmatter,
-      content: htmlContent, // Pass the HTML to the component
-      slug,
-    },
-  };
+    // Convert markdown to HTML
+    const htmlContent = await marked(content);
+
+    // Ensure all data is properly serialized for Next.js
+    const frontmatter: Frontmatter = {
+      title: data.title || '',
+      description: data.description || '',
+      date: data.date || '',
+      modified: data.modified || undefined,
+      author: data.author || undefined,
+      image: data.image || undefined,
+      metaDescription: data.metaDescription || undefined,
+      keywords: data.keywords || undefined,
+      relatedPosts: data.relatedPosts || undefined,
+      faqs: data.faqs || undefined,
+    };
+
+    return {
+      props: {
+        frontmatter,
+        content: htmlContent,
+        slug,
+      },
+    };
+  } catch (error) {
+    console.error('Error in getStaticProps:', error);
+    return {
+      notFound: true,
+    };
+  }
 };

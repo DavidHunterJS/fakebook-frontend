@@ -1,9 +1,9 @@
 // src/pages/blog/index.tsx
 import NextLink from 'next/link';
 import type { GetStaticProps, GetStaticPropsResult } from 'next';
-import fs from 'fs'; // <-- Added
-import path from 'path'; // <-- Added
-import matter from 'gray-matter'; // <-- Added
+import fs from 'fs';
+import path from 'path';
+import matter from 'gray-matter';
 import BlogLayout from '@/components/BlogLayout';
 import {
   Typography,
@@ -12,30 +12,42 @@ import {
   CardActionArea,
 } from '@mui/material';
 
-// --- Post Types (Updated) ---
+// --- Post Types ---
 interface Post {
   slug: string;
-  title: string | null; // <-- Allow null to prevent serialization error
-  date: string | null; // <-- Allow null
+  title: string | null;
+  date: string | null;
 }
+
 interface BlogPageProps {
   posts: Post[];
 }
 
-// --- getStaticProps (Updated) ---
-// This now reads files directly and handles missing frontmatter
-export const getStaticProps: GetStaticProps = async (): Promise<
-  GetStaticPropsResult<BlogPageProps>
-> => {
-  const postsDirectory = path.join(__dirname, '../../../posts');
-  
-  console.log('__dirname:', __dirname);
-  console.log('Looking for posts in:', postsDirectory);
-  
+// --- Helper Function ---
+function getPostsDirectory(): string {
+  // Try multiple possible locations
+  const possiblePaths = [
+    path.join(__dirname, '../../../posts'),    // Production build
+    path.join(process.cwd(), 'posts'),         // Development
+    path.join(__dirname, '../../posts'),       // Alternative
+  ];
+
+  for (const postsPath of possiblePaths) {
+    if (fs.existsSync(postsPath)) {
+      console.log('Found posts directory at:', postsPath);
+      return postsPath;
+    }
+  }
+
+  throw new Error('Posts directory not found in any expected location');
+}
+
+// Helper function to build props from a given posts directory path
+function buildPropsFromPath(postsDirectory: string): GetStaticPropsResult<BlogPageProps> {
   const filenames = fs.readdirSync(postsDirectory);
 
   const allPostsData = filenames
-    .filter((filename) => filename.endsWith('.md')) // Ensure we only read .md files
+    .filter((filename) => filename.endsWith('.md'))
     .map((filename) => {
       // Get slug from filename
       const slug = filename.replace(/\.md$/, '');
@@ -50,9 +62,6 @@ export const getStaticProps: GetStaticProps = async (): Promise<
       // Return the data
       return {
         slug,
-        // *** THIS IS THE FIX ***
-        // Use 'null' as a fallback if the title or date is missing
-        // in the .md file's frontmatter.
         title: data.title || null,
         date: data.date || null,
       };
@@ -73,9 +82,27 @@ export const getStaticProps: GetStaticProps = async (): Promise<
       posts: sortedPosts,
     },
   };
+}
+
+// --- getStaticProps ---
+
+export const getStaticProps: GetStaticProps = async (): Promise<
+  GetStaticPropsResult<BlogPageProps>
+> => {
+  try {
+    const postsDirectory = getPostsDirectory();
+    return buildPropsFromPath(postsDirectory);
+  } catch (error) {
+    console.error('Error loading posts:', error);
+    return {
+      props: {
+        posts: [],
+      },
+    };
+  }
 };
 
-// --- Page Component (Updated to handle nulls and format date) ---
+// --- Page Component ---
 export default function BlogPage({ posts }: BlogPageProps) {
   return (
     <BlogLayout>
@@ -87,17 +114,15 @@ export default function BlogPage({ posts }: BlogPageProps) {
           mb: '1.5rem',
           lineHeight: 1.2,
           fontWeight: 800,
-          textAlign: 'center', // Center the main title
+          textAlign: 'center',
         }}
       >
-        {/* This is the title you had */}
         Amazon Image Compliance Blog
       </Typography>
 
       <Grid container spacing={4} justifyContent="center">
         {posts.map((post) => (
           <Grid size={{xs:12, md: 10, lg: 8}} key={post.slug}>
-            {/* We use CardActionArea inside a Link for a clickable card */}
             <NextLink href={`/blog/${post.slug}`} passHref legacyBehavior>
               <CardActionArea
                 sx={{
@@ -124,22 +149,20 @@ export default function BlogPage({ posts }: BlogPageProps) {
                   }}
                 >
                   <Typography
-                    variant="h2" // Changed to h2 for semantics
+                    variant="h2"
                     sx={{
                       color: '#1e3a8a',
                       mb: '0.8rem',
-                      fontSize: '1.75rem', // Slightly larger for a title
+                      fontSize: '1.75rem',
                       fontWeight: 600,
                     }}
                   >
-                    {/* Handle potential null title */}
                     {post.title || 'Untitled Post'}
                   </Typography>
                   <Typography
                     variant="body2"
                     sx={{ color: '#64748b', fontSize: '0.95rem' }}
                   >
-                    {/* Format the date and handle null */}
                     {post.date
                       ? new Date(post.date).toLocaleDateString('en-US', {
                           year: 'numeric',
