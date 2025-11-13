@@ -27,7 +27,11 @@ interface BlogPageProps {
 export const getStaticProps: GetStaticProps = async (): Promise<
   GetStaticPropsResult<BlogPageProps>
 > => {
-  const postsDirectory = path.resolve(process.cwd(), 'posts');
+  const postsDirectory = path.join(__dirname, '../../../posts');
+  
+  console.log('__dirname:', __dirname);
+  console.log('Looking for posts in:', postsDirectory);
+  
   const filenames = fs.readdirSync(postsDirectory);
 
   const allPostsData = filenames
