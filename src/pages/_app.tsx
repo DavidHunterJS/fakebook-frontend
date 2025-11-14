@@ -42,7 +42,7 @@ function AppContent({ Component, pageProps }: AppProps) {
                           '/subscription/success',
                           '/subscription/cancel',
                           '/blog',
-                          '/blog/*'
+                          '/blog/[slug]'
                         ];
   const hideHeader = noHeaderPaths.includes(router.pathname);
   

@@ -70,7 +70,7 @@ function getPostsDirectory(): string {
     path.join(__dirname, '../../../posts'),    // Production build
     path.join(process.cwd(), 'posts'),         // Development
     path.join(__dirname, '../../posts'),       // Alternative
-    '/app/posts',                               // Heroku production (ADD THIS!)
+    '/app/posts',                              // Heroku production (ADD THIS!)
   ];
 
   for (const postsPath of possiblePaths) {
@@ -107,7 +107,7 @@ export default function BlogPost({ frontmatter, content, slug }: BlogPostProps) 
     dateModified: frontmatter.modified || frontmatter.date || new Date().toISOString(),
     author: {
       '@type': 'Person',
-      name: frontmatter.author || 'David',
+      name: frontmatter.author || 'David Hunter',
     },
     publisher: {
       '@type': 'Organization',
